@@ -1,0 +1,23 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb-ha:pg16
+    container_name: banana_timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: banana_smart_farm
+      POSTGRES_USER: banana_admin
+      POSTGRES_PASSWORD: banana_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./database/01_init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banana_admin -d banana_smart_farm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  timescaledb_data:
+    driver: local

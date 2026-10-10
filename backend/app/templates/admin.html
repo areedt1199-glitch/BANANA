@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Admin Console | Smart Banana IoT & AI Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Kanit', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl">🍌</span>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-lg font-bold text-white tracking-wide">
+                            Smart Banana IoT & AI Platform
+                        </h1>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            ENTERPRISE ADMIN
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">ระบบบริหารจัดการระดับแอดมิน แปลงใหญ่กล้วยหอมทองเพื่อการส่งออก</p>
+                </div>
+            </div>
+
+            <!-- Header Actions -->
+            <div class="flex items-center space-x-4">
+                <a href="/mobile" target="_blank" class="flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 transition">
+                    <i class="fa-solid fa-mobile-screen-button mr-1.5 text-emerald-400"></i> เปิดหน้าจอแอปชาวสวน (LINE LIFF)
+                </a>
+                <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+                    <i class="fa-solid fa-code mr-1"></i> Swagger API
+                </a>
+                <div class="flex items-center space-x-2 pl-3 border-l border-slate-800">
+                    <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-amber-400">
+                        AD
+                    </div>
+                    <div class="text-left hidden sm:block">
+                        <div class="text-xs font-semibold text-white">System SuperAdmin</div>
+                        <div class="text-[10px] text-slate-400">SaaS Multi-Tenant</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Admin Dashboard -->
+    <main class="max-w-7xl mx-auto px-6 py-6 space-y-6 flex-1 w-full">
+        <!-- Overview KPI Stats -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" id="kpi-grid">
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between text-slate-400 text-xs">
+                    <span>จำนวนฟาร์มทั้งหมด</span>
+                    <i class="fa-solid fa-tractor text-amber-400"></i>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-white" id="kpi-farms">1 ฟาร์ม</div>
+                <div class="text-[11px] text-slate-400 mt-1">พื้นที่รวม 10 ไร่ (400 ต้น/ไร่)</div>
+            </div>
+
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between text-slate-400 text-xs">
+                    <span>โซนแปลงปลูก (Active)</span>
+                    <i class="fa-solid fa-chart-pie text-emerald-400"></i>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-white" id="kpi-zones">1 โซน (4 โซนย่อย)</div>
+                <div class="text-[11px] text-emerald-400 mt-1">ระยะที่ 3: เบ่งผลทำน้ำหนัก</div>
+            </div>
+
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between text-slate-400 text-xs">
+                    <span>ฮาร์ดแวร์ ESP32 Controller</span>
+                    <i class="fa-solid fa-microchip text-sky-400"></i>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-white" id="kpi-devices">1 ออนไลน์</div>
+                <div class="text-[11px] text-sky-400 mt-1">Modbus RS485 7-in-1 OK</div>
+            </div>
+
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between text-slate-400 text-xs">
+                    <span>AI Token Quota วันนี้</span>
+                    <i class="fa-solid fa-brain text-purple-400"></i>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-purple-300" id="kpi-ai-quota">128.5k Tokens</div>
+                <div class="text-[11px] text-purple-400 mt-1">42 รูปภาพ ($0.28 USD)</div>
+            </div>
+
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between text-slate-400 text-xs">
+                    <span>แจ้งเตือนค้างอยู่ (Alerts)</span>
+                    <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-white" id="kpi-alerts">0 เหตุการณ์</div>
+                <div class="text-[11px] text-slate-400 mt-1">สถานะระบบ: ปกติ</div>
+            </div>
+        </div>
+
+        <!-- 4 Major Admin Functional Sections -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Section 1: Tenant & Farm Directory -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="font-bold text-sm text-white flex items-center">
+                        <i class="fa-solid fa-users text-amber-400 mr-2"></i>
+                        1. Tenant & Farm Directory (เกษตรกร & สิทธิ์ใช้งาน)
+                    </h3>
+                    <span class="text-xs text-slate-400">SaaS Multi-Tenancy</span>
+                </div>
+
+                <div class="space-y-3" id="tenant-list">
+                    <div class="p-3.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-xs text-white">ฟาร์มกล้วยหอมทอง พรีเมียม (สหกรณ์แปลงใหญ่)</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">Slug: <code>homthong-demo</code> | โควต้า: 5 ฟาร์ม / 20 กล่อง</div>
+                            <div class="text-[11px] text-emerald-400 font-semibold mt-1">
+                                แพ็กเกจปัจจุบัน: <span id="current-tier-text">PRO_AI (ปลดล็อกระบบ AI Vision)</span>
+                            </div>
+                        </div>
+                        <select onchange="changeTenantTier(this.value)" class="bg-slate-900 border border-slate-700 text-xs text-amber-300 font-semibold rounded-lg p-2">
+                            <option value="PRO_AI">PRO_AI (มี AI)</option>
+                            <option value="FREE_RULE_BASED">FREE (ไม่มี AI)</option>
+                            <option value="ENTERPRISE">ENTERPRISE (ไม่จำกัด)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Device Fleet & Health Monitor (with Remote OTA) -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="font-bold text-sm text-white flex items-center">
+                        <i class="fa-solid fa-microchip text-sky-400 mr-2"></i>
+                        2. Device Fleet & Health Monitor (ตู้คอนโทรล & OTA)
+                    </h3>
+                    <span class="text-xs text-emerald-400 font-semibold"><i class="fa-solid fa-circle text-[8px] animate-pulse"></i> 1 Active</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="p-3.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                        <div class="space-y-1">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-bold text-white">ESP32-BANANA-001</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">ONLINE</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400">MAC: <code>A4:CF:12:89:FE:20</code> | สัญญาณ Wi-Fi: <span class="text-emerald-400 font-bold">-62 dBm</span></div>
+                            <div class="text-[11px] text-slate-300">Firmware: <code id="fw-ver">v1.0.0</code> (Modbus RTU + LCD 2004)</div>
+                        </div>
+                        <button onclick="triggerRemoteOTA()" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>รีโมต OTA อัปเดต</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Agronomy Knowledge Base (Dynamic Thresholds) -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="font-bold text-sm text-white flex items-center">
+                        <i class="fa-solid fa-book-bookmark text-emerald-400 mr-2"></i>
+                        3. Agronomy Knowledge Base (ปรับเกณฑ์มาตรฐานกล้วยหอมทอง)
+                    </h3>
+                    <span class="text-xs text-slate-400">ไม่ต้องแก้โค้ด</span>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-slate-400 block mb-1">ความชื้นเปิดน้ำ (% FC):</label>
+                            <input type="number" id="th-moisture-min" value="72" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">ความชื้นปิดน้ำ (% FC):</label>
+                            <input type="number" id="th-moisture-max" value="82" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">ความเค็มปลอดภัยสูงสุด EC (dS/m):</label>
+                            <input type="number" step="0.05" id="th-ec-safe" value="0.85" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-amber-300 font-bold">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">EC วิกฤตสั่งตัดปั๊มปุ๋ย (dS/m):</label>
+                            <input type="number" step="0.05" id="th-ec-hard" value="1.00" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-rose-400 font-bold">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">ความเร็วลมวิกฤต (km/h):</label>
+                            <input type="number" id="th-wind-limit" value="30.0" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sky-400 font-bold">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">เป้าหมายโพแทสเซียม K (ppm):</label>
+                            <input type="number" id="th-k-target" value="280" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-purple-400 font-bold">
+                        </div>
+                    </div>
+
+                    <button onclick="saveAgronomyThresholds()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition mt-2">
+                        บันทึกเกณฑ์มาตรฐานกล้วยหอมทอง
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 4: AI & API Quota Analytics -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="font-bold text-sm text-white flex items-center">
+                        <i class="fa-solid fa-chart-line text-purple-400 mr-2"></i>
+                        4. AI & API Quota Analytics (มอนิเตอร์ต้นทุน AI)
+                    </h3>
+                    <span class="text-xs text-purple-400 font-semibold">Gemini 1.5 Multimodal</span>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">รูปภาพที่ส่งตรวจวันนี้:</span>
+                            <span class="font-bold text-white">42 / 500 รูป (8.4%)</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div class="bg-emerald-500 h-full" style="width: 8.4%"></div>
+                        </div>
+                        <div class="flex justify-between pt-1">
+                            <span class="text-slate-400">ค่าใช้จ่าย AI ประมาณการวันนี้:</span>
+                            <span class="font-bold text-emerald-400">$0.28 USD (~9.8 บาท)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">งบประมาณ AI สูงสุดต่อเดือน:</span>
+                            <span class="font-bold text-slate-300">$25.00 USD (~875 บาท)</span>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-purple-950/30 border border-purple-900/40 rounded-xl text-slate-300 text-[11px]">
+                        💡 <strong>ระบบคุมงบ (Cost Guardrail):</strong> หากยอดอัปโหลดต่อวันแตะ 500 รูป ระบบจะสลับไปใช้ Heuristic Local Engine อัตโนมัติ เพื่อป้องกันค่าบริการบานปลาย
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Telemetry Time-Series Chart -->
+        <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                    <h4 class="font-bold text-sm text-white">ข้อมูลตรวจวัดแบบเรียลไทม์ (TimescaleDB Telemetry Stream)</h4>
+                    <p class="text-xs text-slate-400">ความชื้นดินและค่าความเค็ม EC จากเซนเซอร์ 7-in-1 Modbus RS485</p>
+                </div>
+                <div class="text-xs text-slate-400 flex items-center gap-3">
+                    <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-1.5"></span> ความชื้นดิน (%)</span>
+                    <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 mr-1.5"></span> ความเค็ม EC (dS/m x100)</span>
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="adminChart"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="border-t border-slate-800 py-3 text-center text-xs text-slate-500 bg-slate-900/40">
+        Smart Banana Precision Agriculture Platform &copy; 2026 | Production Multi-Tenant Architecture
+    </footer>
+
+    <script>
+        let currentZoneId = "d5fcc075-5ae5-4b88-9b03-1aa904b28e43";
+        let adminChart = null;
+        let chartData = { labels: [], moisture: [], ec: [] };
+
+        async function initAdmin() {
+            initChart();
+            await refreshData();
+            setInterval(refreshData, 5000);
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('adminChart').getContext('2d');
+            adminChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [
+                        {
+                            label: 'ความชื้นดิน (%)',
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            data: chartData.moisture,
+                            tension: 0.3,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'ความเค็มดิน EC (dS/m x100)',
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            data: chartData.ec,
+                            tension: 0.3,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+                        y: { position: 'left', min: 40, max: 100, grid: { color: '#1e293b' }, ticks: { color: '#3b82f6' } },
+                        y1: { position: 'right', min: 0, max: 150, grid: { drawOnChartArea: false }, ticks: { color: '#f59e0b' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        async function refreshData() {
+            try {
+                const res = await fetch(`/api/v1/telemetry/latest/${currentZoneId}`);
+                const data = await res.json();
+                const soil = data.soil || data.data || {};
+
+                if (soil.moisture_pct !== undefined) {
+                    const timeLabel = new Date().toLocaleTimeString();
+                    if (chartData.labels.length > 15) {
+                        chartData.labels.shift();
+                        chartData.moisture.shift();
+                        chartData.ec.shift();
+                    }
+                    chartData.labels.push(timeLabel);
+                    chartData.moisture.push(soil.moisture_pct);
+                    chartData.ec.push((soil.ec_ds_m * 100));
+                    adminChart.update();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function changeTenantTier(tier) {
+            const tenantsRes = await fetch('/api/v1/admin/tenants');
+            const tenants = await tenantsRes.json();
+            if (tenants.length > 0) {
+                await fetch(`/api/v1/admin/tenants/${tenants[0].id}/tier?tier=${tier}`, { method: 'PUT' });
+                document.getElementById('current-tier-text').innerText = tier;
+                alert(`เปลี่ยนสิทธิ์แพ็กเกจเป็น ${tier} เรียบร้อยแล้ว`);
+            }
+        }
+
+        async function triggerRemoteOTA() {
+            const devicesRes = await fetch('/api/v1/admin/devices');
+            const devices = await devicesRes.json();
+            if (devices.length > 0) {
+                const devId = devices[0].id;
+                const res = await fetch(`/api/v1/admin/devices/${devId}/trigger-ota?target_firmware_version=1.1.0`, { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('fw-ver').innerText = 'v1.1.0 (อัปเดตแล้ว)';
+                alert(data.message);
+            }
+        }
+
+        async function saveAgronomyThresholds() {
+            const payload = {
+                moisture_trigger_min_pct: parseFloat(document.getElementById('th-moisture-min').value),
+                moisture_cutoff_max_pct: parseFloat(document.getElementById('th-moisture-max').value),
+                max_safe_ec_ds_m: parseFloat(document.getElementById('th-ec-safe').value),
+                ec_hard_cutoff_ds_m: parseFloat(document.getElementById('th-ec-hard').value),
+                wind_cutoff_kmh: parseFloat(document.getElementById('th-wind-limit').value),
+                target_k_ppm: parseFloat(document.getElementById('th-k-target').value)
+            };
+            const res = await fetch(`/api/v1/admin/agronomy-thresholds/${currentZoneId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            alert('บันทึกเกณฑ์มาตรฐานกล้วยหอมทองลง Knowledge Base เรียบร้อยแล้ว');
+        }
+
+        window.onload = initAdmin;
+    </script>
+</body>
+</html>

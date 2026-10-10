@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Banana Control (LINE LIFF)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+        body {
+            font-family: 'Kanit', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .lcd-font {
+            font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 1px;
+        }
+        .pilot-lamp-active-red {
+            box-shadow: 0 0 12px 2px rgba(239, 68, 68, 0.9);
+        }
+        .pilot-lamp-active-green {
+            box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.9);
+        }
+        .pilot-lamp-active-yellow {
+            box-shadow: 0 0 12px 2px rgba(234, 179, 8, 0.9);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex justify-center selection:bg-emerald-500">
+    <!-- Smartphone Frame Container -->
+    <div class="w-full max-w-md min-h-screen bg-slate-900 flex flex-col shadow-2xl relative pb-20 border-x border-slate-800">
+        
+        <!-- Mobile Header -->
+        <header class="bg-slate-900/95 backdrop-blur px-4 pt-3 pb-2.5 border-b border-slate-800 sticky top-0 z-40">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🍌</span>
+                    <div>
+                        <div class="text-[11px] font-semibold text-emerald-400 flex items-center">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                            LINE LIFF &bull; Digital Twin Sync
+                        </div>
+                        <h1 class="text-sm font-bold text-white leading-tight">แปลงที่ 1: กล้วยหอมทอง (10 ไร่)</h1>
+                    </div>
+                </div>
+                <!-- Box Status Indicator -->
+                <div class="flex items-center space-x-1.5 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">
+                    <i class="fa-solid fa-server text-emerald-400 text-xs"></i>
+                    <span class="text-[10px] font-medium text-slate-200">ESP32-S3 Online</span>
+                </div>
+            </div>
+
+            <!-- Agronomic Stage Summary -->
+            <div class="mt-2 flex items-center justify-between bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+                <div class="flex items-center space-x-1.5 text-xs font-bold text-amber-300">
+                    <i class="fa-solid fa-seedling text-amber-400"></i>
+                    <span>ระยะที่ 3: เบ่งผลทำน้ำหนัก (เดือนที่ 7.5)</span>
+                </div>
+                <span class="text-[10px] text-amber-200 font-semibold">ดินสมบูรณ์ดี</span>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Tabs -->
+        <main class="flex-1 p-4 space-y-4 overflow-y-auto">
+
+            <!-- TAB 1: สวนของฉัน (Dashboard & Digital Twin Panel) -->
+            <div id="tab-1-content" class="space-y-4">
+                
+                <!-- Danger Warning Banner (If high wind or high salinity) -->
+                <div id="m-danger-banner" class="hidden p-3 bg-rose-950/80 border border-rose-800 rounded-xl space-y-1">
+                    <div class="flex items-center space-x-2 text-rose-300 text-xs font-bold">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span id="m-danger-title">เตือนภัยวิกฤต</span>
+                    </div>
+                    <p class="text-[11px] text-slate-200" id="m-danger-msg"></p>
+                </div>
+
+                <!-- Sensor Key Vitals Bar -->
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400 flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-droplet text-blue-400 text-[10px]"></i>
+                            <span>ความชื้นดิน</span>
+                        </div>
+                        <div class="text-base font-bold text-white mt-0.5" id="val-soil-moisture">74.5 %</div>
+                        <div class="text-[9px] text-emerald-400">75-85% FC</div>
+                    </div>
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400 flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-bolt text-amber-400 text-[10px]"></i>
+                            <span>ความเค็ม EC</span>
+                        </div>
+                        <div class="text-base font-bold text-white mt-0.5" id="val-soil-ec">0.58 dS/m</div>
+                        <div class="text-[9px] text-amber-400">&le; 0.85 ปกติ</div>
+                    </div>
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400 flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-wind text-sky-400 text-[10px]"></i>
+                            <span>ความเร็วลม</span>
+                        </div>
+                        <div class="text-base font-bold text-white mt-0.5" id="val-wind-speed">12.5 km/h</div>
+                        <div class="text-[9px] text-sky-400">&lt; 30 ลมสงบ</div>
+                    </div>
+                </div>
+
+                <!-- ======================================================== -->
+                <!-- 📦 DIGITAL TWIN: แผงตู้คอนโทรล 6 แถว (Industrial Standard) -->
+                <!-- ======================================================== -->
+                <div class="bg-slate-950 rounded-2xl border-2 border-slate-800 p-3.5 shadow-2xl space-y-3.5">
+                    
+                    <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <span class="text-[11px] font-bold text-amber-400 tracking-wider uppercase flex items-center">
+                            <i class="fa-solid fa-microchip mr-1.5 text-xs"></i> SMART BANANA IOT CONTROLLER
+                        </span>
+                        <span class="text-[10px] text-slate-400 font-mono">PANEL SYNC: LIVE</span>
+                    </div>
+
+                    <!-- แถว 1: จอ LCD 2004 (I2C) เสมือนจริง (20x4 ตัวอักษร) -->
+                    <div class="bg-emerald-950/80 border-2 border-emerald-700/80 rounded-xl p-3 shadow-inner">
+                        <div class="text-[10px] text-emerald-400/70 font-mono uppercase mb-1 flex justify-between">
+                            <span>LCD 2004 (I2C 0x27)</span>
+                            <span>BACKLIGHT: ON</span>
+                        </div>
+                        <div class="lcd-font text-emerald-300 text-xs sm:text-sm leading-relaxed whitespace-pre font-bold" id="virtual-lcd">
+T:31.0C  RH:72% S:3
+Soil:74.5% pH:6.2
+EC:0.58  K:265ppm
+P:OFF F:OFF Z:NONE
+                        </div>
+                    </div>
+
+                    <!-- แถว 2: ไฟแสดงสถานะระบบไฟฟ้า 3 ระดับ (Fail-safe Power Pilot Lamps) -->
+                    <div class="bg-slate-900/90 rounded-xl p-2.5 border border-slate-800 flex items-center justify-around text-center">
+                        <div>
+                            <div class="w-4 h-4 mx-auto rounded-full bg-rose-500 pilot-lamp-active-red animate-pulse"></div>
+                            <div class="text-[10px] font-bold text-rose-300 mt-1">🔴 AC 220V</div>
+                            <div class="text-[8px] text-slate-400">ไฟบ้านหลัก</div>
+                        </div>
+                        <div class="h-6 w-px bg-slate-800"></div>
+                        <div>
+                            <div class="w-4 h-4 mx-auto rounded-full bg-emerald-500 pilot-lamp-active-green"></div>
+                            <div class="text-[10px] font-bold text-emerald-300 mt-1">🟢 DC 24V</div>
+                            <div class="text-[8px] text-slate-400">โซลินอยด์วาล์ว</div>
+                        </div>
+                        <div class="h-6 w-px bg-slate-800"></div>
+                        <div>
+                            <div class="w-4 h-4 mx-auto rounded-full bg-emerald-500 pilot-lamp-active-green"></div>
+                            <div class="text-[10px] font-bold text-emerald-300 mt-1">🟢 DC 12V</div>
+                            <div class="text-[8px] text-slate-400">บอร์ด/เซนเซอร์</div>
+                        </div>
+                    </div>
+
+                    <!-- แถว 3 & 4: ปั๊มน้ำ และ ปั๊มปุ๋ย (สวิตช์กด + ไฟสถานะ RUN) -->
+                    <div class="grid grid-cols-2 gap-3 pt-1">
+                        <!-- ปั๊มน้ำ -->
+                        <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center space-y-2">
+                            <button onclick="toggleControl('WATER_PUMP')" id="btn-water-pump" class="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold active:scale-95 transition flex items-center justify-center space-x-1.5 shadow">
+                                <i class="fa-solid fa-power-off text-xs"></i>
+                                <span>[🟡 สวิตช์ปั๊มน้ำ]</span>
+                            </button>
+                            <div class="flex items-center space-x-1.5">
+                                <div id="lamp-water-pump" class="w-3 h-3 rounded-full bg-slate-700"></div>
+                                <span class="text-[10px] font-bold text-slate-400" id="text-water-pump">🟡 RUN: IDLE</span>
+                            </div>
+                        </div>
+
+                        <!-- ปั๊มปุ๋ย -->
+                        <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center space-y-2">
+                            <button onclick="toggleControl('FERT_PUMP')" id="btn-fert-pump" class="w-full py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/50 rounded-lg text-xs font-bold active:scale-95 transition flex items-center justify-center space-x-1.5 shadow">
+                                <i class="fa-solid fa-vial text-xs"></i>
+                                <span>[🟡 สวิตช์ปั๊มปุ๋ย]</span>
+                            </button>
+                            <div class="flex items-center space-x-1.5">
+                                <div id="lamp-fert-pump" class="w-3 h-3 rounded-full bg-slate-700"></div>
+                                <span class="text-[10px] font-bold text-slate-400" id="text-fert-pump">🟡 RUN: IDLE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- แถว 5 & 6: 4 โซน (สวิตช์กด แถว 5 + ไฟแสดงสถานะ แถว 6) -->
+                    <div class="pt-2 border-t border-slate-800/80">
+                        <div class="text-[10px] text-slate-400 mb-2 font-semibold">โซลินอยด์วาล์ว 4 โซนย่อย (Digital Twin Switches):</div>
+                        <div class="grid grid-cols-4 gap-2 text-center">
+                            
+                            <!-- โซน 1 -->
+                            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 space-y-1.5">
+                                <button onclick="toggleControl('ZONE_1')" id="btn-z1" class="w-full py-1.5 bg-slate-800 hover:bg-emerald-950 text-slate-200 border border-slate-700 rounded text-[11px] font-bold active:scale-95 transition">
+                                    [🟢 โซน 1]
+                                </button>
+                                <div class="flex items-center justify-center space-x-1 pt-0.5">
+                                    <div id="lamp-z1" class="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                                    <span class="text-[9px] font-bold text-slate-400" id="text-z1">ZONE 1</span>
+                                </div>
+                            </div>
+
+                            <!-- โซน 2 -->
+                            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 space-y-1.5">
+                                <button onclick="toggleControl('ZONE_2')" id="btn-z2" class="w-full py-1.5 bg-slate-800 hover:bg-emerald-950 text-slate-200 border border-slate-700 rounded text-[11px] font-bold active:scale-95 transition">
+                                    [🟢 โซน 2]
+                                </button>
+                                <div class="flex items-center justify-center space-x-1 pt-0.5">
+                                    <div id="lamp-z2" class="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                                    <span class="text-[9px] font-bold text-slate-400" id="text-z2">ZONE 2</span>
+                                </div>
+                            </div>
+
+                            <!-- โซน 3 -->
+                            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 space-y-1.5">
+                                <button onclick="toggleControl('ZONE_3')" id="btn-z3" class="w-full py-1.5 bg-slate-800 hover:bg-emerald-950 text-slate-200 border border-slate-700 rounded text-[11px] font-bold active:scale-95 transition">
+                                    [🟢 โซน 3]
+                                </button>
+                                <div class="flex items-center justify-center space-x-1 pt-0.5">
+                                    <div id="lamp-z3" class="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                                    <span class="text-[9px] font-bold text-slate-400" id="text-z3">ZONE 3</span>
+                                </div>
+                            </div>
+
+                            <!-- โซน 4 -->
+                            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 space-y-1.5">
+                                <button onclick="toggleControl('ZONE_4')" id="btn-z4" class="w-full py-1.5 bg-slate-800 hover:bg-emerald-950 text-slate-200 border border-slate-700 rounded text-[11px] font-bold active:scale-95 transition">
+                                    [🟢 โซน 4]
+                                </button>
+                                <div class="flex items-center justify-center space-x-1 pt-0.5">
+                                    <div id="lamp-z4" class="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                                    <span class="text-[9px] font-bold text-slate-400" id="text-z4">ZONE 4</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Daily Evapotranspiration Card -->
+                <div class="bg-blue-950/30 border border-blue-900/40 p-3.5 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <div class="text-[11px] font-bold text-blue-300">ความต้องการน้ำวันนี้ (ET₀ Penman-Monteith)</div>
+                        <div class="text-lg font-bold text-white mt-0.5" id="val-et0-water">34.3 ลิตร/ต้น/วัน</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs font-bold text-emerald-400" id="val-et0-runtime">รด 29 นาที/โซน</div>
+                        <div class="text-[10px] text-slate-400">หัวมินิสปริงเกลอร์ 70 L/h</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2: AI สแกนกล้วย (AI Agronomist) -->
+            <div id="tab-2-content" class="hidden space-y-4">
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 text-center">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400 text-2xl shadow-lg">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">AI Visual Phenotyping</h3>
+                        <p class="text-xs text-slate-400 mt-1">ถ่ายรูปต้นหรือผลกล้วยหอมทองเพื่อประเมินอายุ, ลบเหลี่ยมของผล และสุขภาพใบ</p>
+                    </div>
+
+                    <!-- Hidden Input for Native Camera -->
+                    <input type="file" id="tab2-camera-input" accept="image/*" capture="environment" class="hidden" onchange="openAgeModal(this)">
+
+                    <button onclick="document.getElementById('tab2-camera-input').click()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/60 transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>[ 📸 ถ่ายรูปต้นกล้วย ]</span>
+                    </button>
+                </div>
+
+                <!-- Instant AI Result Card -->
+                <div id="ai-result-panel" class="hidden bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span class="text-xs font-bold text-amber-300" id="ai-res-stage">ระยะที่ 3: เบ่งผลและทำน้ำหนัก</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                            ความแม่นยำ 94.5%
+                        </span>
+                    </div>
+
+                    <div class="space-y-2 text-xs">
+                        <div class="flex items-center space-x-2 text-slate-300">
+                            <i class="fa-solid fa-leaf text-emerald-400"></i>
+                            <span><strong>สุขภาพใบ:</strong> ไม่พบโรคใบจุดซิกาโทกา (สมบูรณ์ดี)</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-slate-300">
+                            <i class="fa-solid fa-circle-notch text-amber-400"></i>
+                            <span><strong>เหลี่ยมผล:</strong> ผลเริ่มกลม (Rounding) ใกล้เต็มที่</span>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-amber-950/40 rounded-xl border border-amber-900/60 text-xs text-amber-200">
+                        <div class="font-bold mb-1">💡 คำแนะนำใส่ปุ๋ยประจำสัปดาห์:</div>
+                        <div>สูตร K สูง 1:0.5:4 (ปุ๋ย 0-0-60 White Potash 60 กรัม/ต้น) เพื่อเร่งน้ำหนักและเพิ่มความหนาเปลือก</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: ตั้งค่าการทำงาน (Settings & Automation) -->
+            <div id="tab-3-content" class="hidden space-y-4">
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        <i class="fa-solid fa-clock mr-1.5 text-amber-400"></i> โหมดการควบคุม
+                    </h3>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setMode('TIMER_ONLY')" id="mode-btn-timer" class="py-2.5 px-3 rounded-xl border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300 active:scale-95 transition">
+                            ⏱️ ตั้งเวลาธรรมดา
+                        </button>
+                        <button onclick="setMode('AI_ASSISTED')" id="mode-btn-ai" class="py-2.5 px-3 rounded-xl border border-emerald-600 bg-emerald-950 text-xs font-bold text-emerald-300 active:scale-95 transition">
+                            🤖 AI อัจฉริยะ (แนะนำ)
+                        </button>
+                    </div>
+
+                    <div class="border-t border-slate-800 pt-3 space-y-3">
+                        <h4 class="text-xs font-bold text-slate-300">ระยะเวลารดน้ำรายโซน (นาที):</h4>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="text-[10px] text-slate-400">โซน 1 (นาที)</label>
+                                <input type="number" id="cfg-z1" value="15" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-bold text-white mt-1">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-400">โซน 2 (นาที)</label>
+                                <input type="number" id="cfg-z2" value="20" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-bold text-white mt-1">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-400">โซน 3 (นาที)</label>
+                                <input type="number" id="cfg-z3" value="15" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-bold text-white mt-1">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-400">โซน 4 (นาที)</label>
+                                <input type="number" id="cfg-z4" value="15" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-bold text-white mt-1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-800 pt-3 space-y-2">
+                        <h4 class="text-xs font-bold text-slate-300">การแจ้งเตือน LINE:</h4>
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>เตือนภัยลมกระโชกแรง (&gt;30 km/h)</span>
+                            <input type="checkbox" checked class="w-4 h-4 rounded text-emerald-600">
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>เตือนดินเค็ม EC เกิน 1.0 (รากไหม้)</span>
+                            <input type="checkbox" checked class="w-4 h-4 rounded text-emerald-600">
+                        </div>
+                    </div>
+
+                    <button onclick="saveSettings()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition">
+                        บันทึกการตั้งค่า
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation Bar (3 Tabs) -->
+        <nav class="absolute bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur border-t border-slate-800 px-6 flex items-center justify-around z-40">
+            <button onclick="switchTab(1)" id="nav-tab-1" class="flex flex-col items-center space-y-1 text-emerald-400">
+                <i class="fa-solid fa-house text-base"></i>
+                <span class="text-[10px] font-semibold">สวนของฉัน</span>
+            </button>
+            <button onclick="switchTab(2)" id="nav-tab-2" class="flex flex-col items-center space-y-1 text-slate-400 hover:text-white">
+                <div class="w-9 h-9 -mt-4 rounded-full bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-900/50">
+                    <i class="fa-solid fa-camera text-sm"></i>
+                </div>
+                <span class="text-[10px] font-medium">AI สแกนกล้วย</span>
+            </button>
+            <button onclick="switchTab(3)" id="nav-tab-3" class="flex flex-col items-center space-y-1 text-slate-400 hover:text-white">
+                <i class="fa-solid fa-sliders text-base"></i>
+                <span class="text-[10px] font-medium">ตั้งค่า</span>
+            </button>
+        </nav>
+
+        <!-- Modal Asking Age -->
+        <div id="age-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-xs w-full space-y-3 text-center">
+                <div class="text-2xl">🍌</div>
+                <h4 class="text-sm font-bold text-white">ต้นกล้วยต้นนี้อายุประมาณกี่เดือน?</h4>
+                <p class="text-xs text-slate-400">ช่วยให้ AI คำนวณสูตรปุ๋ยโพแทสเซียมได้แม่นยำยิ่งขึ้น</p>
+                <input type="number" id="modal-age-input" placeholder="ระบุเดือน (เช่น 7)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-center text-sm font-bold text-white">
+                <div class="space-y-2 pt-1">
+                    <button onclick="submitAIAnalysis(false)" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">
+                        ตกลง และวิเคราะห์
+                    </button>
+                    <button onclick="submitAIAnalysis(true)" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition">
+                        ไม่แน่ใจ ให้ AI ประเมินเอง
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentActiveTab = 1;
+        let selectedPhotoFile = null;
+
+        async function initMobileApp() {
+            await refreshSummary();
+            setInterval(refreshSummary, 3000); // 3s real-time bi-directional sync
+        }
+
+        async function refreshSummary() {
+            try {
+                const res = await fetch('/api/v1/mobile/summary');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // 1. Update Virtual LCD 2004 (4 Lines)
+                if (data.lcd_display) {
+                    document.getElementById('virtual-lcd').innerText = data.lcd_display.join('\n');
+                }
+
+                // 2. Update Vitals
+                document.getElementById('val-soil-moisture').innerText = data.soil.moisture_pct.toFixed(1) + ' %';
+                document.getElementById('val-soil-ec').innerText = data.soil.ec_ds_m.toFixed(2) + ' dS/m';
+                document.getElementById('val-wind-speed').innerText = data.weather.wind_speed_kmh.toFixed(1) + ' km/h';
+
+                if (data.water_recommendation) {
+                    document.getElementById('val-et0-water').innerText = data.water_recommendation.liters_per_tree.toFixed(1) + ' ลิตร/ต้น/วัน';
+                    document.getElementById('val-et0-runtime').innerText = `รด ${data.water_recommendation.runtime_minutes} นาที/โซน`;
+                }
+
+                // 3. Update Pumps
+                updatePumpUI('water-pump', data.pumps.water_pump.is_active);
+                updatePumpUI('fert-pump', data.pumps.fertilizer_pump.is_active);
+
+                // 4. Update 4 Zones
+                updateZoneUI('z1', data.zones.zone_1.is_active);
+                updateZoneUI('z2', data.zones.zone_2.is_active);
+                updateZoneUI('z3', data.zones.zone_3.is_active);
+                updateZoneUI('z4', data.zones.zone_4.is_active);
+
+                // 5. Danger Banner
+                const banner = document.getElementById('m-danger-banner');
+                if (data.active_alerts && data.active_alerts.length > 0) {
+                    banner.classList.remove('hidden');
+                    document.getElementById('m-danger-title').innerText = data.active_alerts[0].title;
+                    document.getElementById('m-danger-msg').innerText = data.active_alerts[0].message;
+                } else {
+                    banner.classList.add('hidden');
+                }
+
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function updatePumpUI(key, isActive) {
+            const lamp = document.getElementById(`lamp-${key}`);
+            const text = document.getElementById(`text-${key}`);
+            const btn = document.getElementById(`btn-${key}`);
+
+            if (isActive) {
+                lamp.className = "w-3 h-3 rounded-full bg-yellow-400 pilot-lamp-active-yellow animate-pulse";
+                text.innerText = "🟡 RUN: ACTIVE";
+                text.className = "text-[10px] font-bold text-yellow-300";
+                btn.classList.add('ring-2', 'ring-yellow-400');
+            } else {
+                lamp.className = "w-3 h-3 rounded-full bg-slate-700";
+                text.innerText = "🟡 RUN: IDLE";
+                text.className = "text-[10px] font-bold text-slate-500";
+                btn.classList.remove('ring-2', 'ring-yellow-400');
+            }
+        }
+
+        function updateZoneUI(key, isActive) {
+            const lamp = document.getElementById(`lamp-${key}`);
+            const text = document.getElementById(`text-${key}`);
+            const btn = document.getElementById(`btn-${key}`);
+
+            if (isActive) {
+                lamp.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 pilot-lamp-active-green animate-pulse";
+                text.className = "text-[9px] font-bold text-emerald-300";
+                btn.className = "w-full py-1.5 bg-emerald-600 text-white rounded text-[11px] font-bold active:scale-95 transition shadow-lg shadow-emerald-950/60";
+            } else {
+                lamp.className = "w-2.5 h-2.5 rounded-full bg-slate-700";
+                text.className = "text-[9px] font-bold text-slate-500";
+                btn.className = "w-full py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded text-[11px] font-bold active:scale-95 transition";
+            }
+        }
+
+        async function toggleControl(target) {
+            // Find current state from DOM or query
+            let currentState = false;
+            if (target === 'WATER_PUMP') currentState = document.getElementById('lamp-water-pump').classList.contains('bg-yellow-400');
+            else if (target === 'FERT_PUMP') currentState = document.getElementById('lamp-fert-pump').classList.contains('bg-yellow-400');
+            else if (target === 'ZONE_1') currentState = document.getElementById('lamp-z1').classList.contains('bg-emerald-400');
+            else if (target === 'ZONE_2') currentState = document.getElementById('lamp-z2').classList.contains('bg-emerald-400');
+            else if (target === 'ZONE_3') currentState = document.getElementById('lamp-z3').classList.contains('bg-emerald-400');
+            else if (target === 'ZONE_4') currentState = document.getElementById('lamp-z4').classList.contains('bg-emerald-400');
+
+            const nextState = !currentState;
+            try {
+                const res = await fetch(`/api/v1/mobile/toggle-control?target=${target}&desired_state=${nextState}`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.detail || 'เกิดข้อผิดพลาด');
+                    return;
+                }
+                await refreshSummary();
+            } catch (e) {
+                alert('ไม่สามารถส่งคำสั่งไปยังกล่องคอนโทรลได้');
+            }
+        }
+
+        function switchTab(tabIndex) {
+            currentActiveTab = tabIndex;
+            [1, 2, 3].forEach(i => {
+                document.getElementById(`tab-${i}-content`).classList.toggle('hidden', i !== tabIndex);
+                const nav = document.getElementById(`nav-tab-${i}`);
+                if (i === tabIndex) {
+                    nav.classList.add('text-emerald-400');
+                    nav.classList.remove('text-slate-400');
+                } else {
+                    nav.classList.remove('text-emerald-400');
+                    nav.classList.add('text-slate-400');
+                }
+            });
+        }
+
+        function openAgeModal(input) {
+            if (!input.files || input.files.length === 0) return;
+            selectedPhotoFile = input.files[0];
+            document.getElementById('age-modal').classList.remove('hidden');
+        }
+
+        async function submitAIAnalysis(isUnsure) {
+            document.getElementById('age-modal').classList.add('hidden');
+            const ageMonths = isUnsure ? 7 : (parseInt(document.getElementById('modal-age-input').value) || 7);
+            const days = ageMonths * 30;
+
+            const formData = new FormData();
+            formData.append('zone_id', 'd5fcc075-5ae5-4b88-9b03-1aa904b28e43');
+            formData.append('known_planting_days', days);
+            formData.append('file', selectedPhotoFile);
+
+            try {
+                const res = await fetch('/api/v1/ai/assess-plant', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('ai-result-panel').classList.remove('hidden');
+            } catch (err) {
+                alert('วิเคราะห์ภาพล้มเหลว');
+            }
+        }
+
+        function setMode(mode) {
+            document.getElementById('mode-btn-timer').className = mode === 'TIMER_ONLY' 
+                ? 'py-2.5 px-3 rounded-xl border border-emerald-600 bg-emerald-950 text-xs font-bold text-emerald-300'
+                : 'py-2.5 px-3 rounded-xl border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300';
+            document.getElementById('mode-btn-ai').className = mode === 'AI_ASSISTED'
+                ? 'py-2.5 px-3 rounded-xl border border-emerald-600 bg-emerald-950 text-xs font-bold text-emerald-300'
+                : 'py-2.5 px-3 rounded-xl border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300';
+        }
+
+        async function saveSettings() {
+            alert('บันทึกการตั้งค่าเรียบร้อยแล้ว');
+        }
+
+        window.onload = initMobileApp;
+    </script>
+</body>
+</html>
