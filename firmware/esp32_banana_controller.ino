@@ -289,7 +289,7 @@ void checkPhysicalButtons() {
 // ==========================================
 void setup() {
   Serial.begin(115200);
-  Serial1.begin(9600, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  Serial1.begin(4800, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN); // 4800 bps matching factory sensor
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   lcd.init();
