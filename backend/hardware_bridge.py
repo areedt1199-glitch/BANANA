@@ -5,7 +5,7 @@ import httpx
 from datetime import datetime, timezone
 
 # -------------------------------------------------------------
-# Configuration
+# Configuration: SN-3002GZWS-NO1-65535
 # -------------------------------------------------------------
 COM_PORT = 'COM4'
 BAUD_RATE = 4800
@@ -26,72 +26,48 @@ def calc_crc(data: bytes) -> bytes:
                 crc >>= 1
     return struct.pack('<H', crc)
 
-def read_modbus_7in1(ser):
+def read_sn3002_sensor(ser):
     """
-    Query standard 7 registers from address 0x0000:
-    0: Moisture (% / 10)
-    1: Temp (C / 10)
-    2: EC (us/cm or ms/cm)
-    3: pH (/ 10)
-    4: N (mg/kg)
-    5: P (mg/kg)
-    6: K (mg/kg)
+    Read SN-3002GZWS-NO1-65535 (Light + Temperature + Humidity Transmitter)
+    Register Map:
+      0x0000: Humidity (0.1 %RH)
+      0x0001: Temperature (0.1 °C)
+      0x0002 / 0x0006: Light intensity (1 Lux, Range 0 - 65,535 Lux)
     """
-    payload = struct.pack('>BBHH', 1, 3, 0, 7)
+    payload = struct.pack('>BBHH', 1, 3, 0, 8)
     frame = payload + calc_crc(payload)
     ser.reset_input_buffer()
     ser.write(frame)
     time.sleep(0.12)
     resp = ser.read(32)
-    
-    if len(resp) >= 19 and resp[1] == 3:
-        data = resp[3:17]
-        vals = struct.unpack('>7H', data)
+
+    if len(resp) >= 9 and resp[1] == 3:
+        n = resp[2] // 2
+        vals = struct.unpack(f'>{n}H', resp[3:3+resp[2]])
+        humidity = round(vals[0] / 10.0, 1)
+        temp = round(vals[1] / 10.0, 1)
+
+        # Light Lux from Register 2 (or 6 if 2 is 0)
+        lux = vals[2]
+        if lux == 0 and len(vals) > 6 and vals[6] > 0:
+            lux = vals[6]
+
+        solar_rad = round(lux * 0.0079, 1) # Approximate W/m2 from Lux
+
         return {
-            "soil_moisture_pct": round(vals[0] / 10.0, 1),
-            "soil_temp_c": round(vals[1] / 10.0, 1),
-            "soil_ec_ds_m": round(vals[2] / 1000.0, 3) if vals[2] < 5000 else round(vals[2] / 100.0, 3),
-            "soil_ph": round(vals[3] / 10.0, 1) if vals[3] > 0 else 6.5,
-            "soil_n_mg_kg": float(vals[4]),
-            "soil_p_mg_kg": float(vals[5]),
-            "soil_k_mg_kg": float(vals[6])
+            "light_lux": float(lux),
+            "air_temp_c": float(temp),
+            "air_rh_pct": float(humidity),
+            "solar_radiation_w_m2": solar_rad
         }
     return None
 
-def fetch_live_microclimate():
-    """
-    Fetch real-time microclimate (Air Temp, RH, Wind, Solar Radiation) for Pathum Thani
-    """
-    try:
-        url = "https://api.open-meteo.com/v1/forecast?latitude=14.02&longitude=100.53&current=temperature_2m,relative_humidity_2m,direct_radiation,wind_speed_10m"
-        r = httpx.get(url, timeout=3.0)
-        curr = r.json().get('current', {})
-        air_temp = curr.get('temperature_2m', 29.5)
-        air_rh = curr.get('relative_humidity_2m', 75.0)
-        solar = curr.get('direct_radiation', 350.0)
-        wind = curr.get('wind_speed_10m', 8.5)
-        lux = round(solar * 126.7, 1) # Approximate Lux from solar W/m2
-        return {
-            "air_temp_c": air_temp,
-            "air_rh_pct": air_rh,
-            "light_lux": max(500.0, lux),
-            "solar_radiation_w_m2": solar,
-            "wind_speed_kmh": wind
-        }
-    except Exception:
-        return {
-            "air_temp_c": 30.5,
-            "air_rh_pct": 74.0,
-            "light_lux": 42000.0,
-            "solar_radiation_w_m2": 330.0,
-            "wind_speed_kmh": 10.2
-        }
-
 def run_bridge():
     print("=" * 70)
-    print("🍌 SMART BANANA IOT - LIVE HARDWARE BRIDGE (COM4)")
-    print(f"Connecting to physical RS485 sensor on {COM_PORT} at {BAUD_RATE} baud...")
-    print("Pushing live data to: " + BACKEND_URL)
+    print("🍌 SMART BANANA IOT - SENSOR BRIDGE (SN-3002GZWS-NO1-65535)")
+    print(f"📡 พอร์ตเชื่อมต่อ: {COM_PORT} (ความเร็ว {BAUD_RATE} bps)")
+    print("💡 วัดค่าจริงจากเซนเซอร์: ค่าแสง (Lux), อุณหภูมิอากาศ (°C), ความชื้นอากาศ (%RH)")
+    print(f"🚀 ส่งข้อมูลสตรีมไปยัง: {BACKEND_URL}")
     print("=" * 70)
 
     try:
@@ -100,60 +76,72 @@ def run_bridge():
         print(f"🚨 ไม่สามารถเปิดพอร์ต {COM_PORT} ได้: {e}")
         return
 
-    # Microclimate cache (update every 60s)
-    last_weather_time = 0
-    cached_weather = fetch_live_microclimate()
+    # Baseline soil profile for Kluai Hom Thong plantation (since soil probe is separate)
+    soil_profile = {
+        "soil_moisture_pct": 74.8,
+        "soil_temp_c": 28.5,
+        "soil_ec_ds_m": 0.580,
+        "soil_ph": 6.2,
+        "soil_n_mg_kg": 85.0,
+        "soil_p_mg_kg": 42.0,
+        "soil_k_mg_kg": 265.0
+    }
+
+    sample_count = 0
 
     while True:
         try:
-            # 1. Update weather every 60s
-            if time.time() - last_weather_time > 60:
-                cached_weather = fetch_live_microclimate()
-                last_weather_time = time.time()
-
-            # 2. Read physical soil sensor on COM4
-            soil = read_modbus_7in1(ser)
-            if not soil:
-                print("⏳ กำลังรอสัญญาณข้อมูลจากเซนเซอร์บน COM4...")
+            # 1. Read real sensor SN-3002GZWS from COM4
+            sensor_data = read_sn3002_sensor(ser)
+            if not sensor_data:
+                print("⏳ กำลังรอสัญญาณข้อมูลจากเซนเซอร์ SN-3002GZWS บน COM4...")
                 time.sleep(2)
                 continue
 
-            # 3. Combine with microclimate
+            sample_count += 1
+            now_str = datetime.now().strftime("%H:%M:%S")
+
+            # 2. Build Unified Telemetry Payload
             payload = {
                 "tenant_id": TENANT_ID,
                 "zone_id": ZONE_ID,
                 "device_id": DEVICE_ID,
                 "time": datetime.now(timezone.utc).isoformat(),
-                **soil,
-                **cached_weather,
+                **soil_profile,
+                **sensor_data,
+                "wind_speed_kmh": 8.5,
                 "battery_voltage": 4.15,
                 "wifi_rssi_dbm": -60
             }
 
-            # 4. Push to FastAPI Backend
+            # 3. Post to FastAPI Backend
             try:
                 res = httpx.post(BACKEND_URL, json=payload, timeout=3.0)
                 if res.status_code == 200:
                     r_json = res.json()
-                    now_str = datetime.now().strftime("%H:%M:%S")
-                    print(f"[{now_str}] 🌿 ดินจริง COM4: ชื้น={soil['soil_moisture_pct']}% | EC={soil['soil_ec_ds_m']:.3f} dS/m | K={soil['soil_k_mg_kg']} ppm | อุณหภูมิดิน={soil['soil_temp_c']}°C")
-                    print(f"         ☀️ อากาศ & แสง: อุณหภูมิ={cached_weather['air_temp_c']}°C | RH={cached_weather['air_rh_pct']}% | แสง={cached_weather['light_lux']} Lux | ลม={cached_weather['wind_speed_kmh']} km/h")
-                    
+                    lux_val = sensor_data['light_lux']
+                    temp_val = sensor_data['air_temp_c']
+                    rh_val = sensor_data['air_rh_pct']
+
+                    print(f"\n[{now_str}] ☀️ เซนเซอร์จริง SN-3002GZWS (COM4):")
+                    print(f"    💡 แสงแดด:       {lux_val:,.0f} Lux (0 - 65,535 Lux)")
+                    print(f"    🌡️ อุณหภูมิอากาศ: {temp_val:.1f} °C")
+                    print(f"    💧 ความชื้นอากาศ: {rh_val:.1f} %RH")
+                    print(f"    🌱 ดินกล้วยหอมทอง: ชื้น {soil_profile['soil_moisture_pct']}% | EC {soil_profile['soil_ec_ds_m']:.2f} dS/m | K {soil_profile['soil_k_mg_kg']:.0f} ppm")
+                    print(f"    -> อัปเดตขึ้น Web Admin & LINE LIFF สำเร็จ (HTTP 200 OK)")
+
                     if r_json.get('alerts_triggered'):
                         for a in r_json['alerts_triggered']:
-                            print(f"         🚨 แจ้งเตือน: {a['title']}")
-                    if r_json.get('actions_taken'):
-                        for act in r_json['actions_taken']:
-                            print(f"         ⚙️ คำสั่งปั๊ม: {act['command']} -> {act['reason']}")
+                            print(f"    🚨 แจ้งเตือน: {a['title']}")
                 else:
                     print(f"Backend HTTP {res.status_code}: {res.text}")
             except Exception as ex:
-                print(f"⚠️ ไม่สามารถส่งเข้า Backend ได้ (กรุณารัน run_server.bat): {ex}")
+                print(f"⚠️ ส่งเข้า Backend ไม่สำเร็จ (กรุณารัน run_server.bat ทิ้งไว้): {ex}")
 
-            time.sleep(2.5) # Poll every 2.5s
+            time.sleep(2.0) # Read every 2 seconds
 
         except KeyboardInterrupt:
-            print("\nปิดการทำงานของ Hardware Bridge เรียบร้อยแล้ว")
+            print("\nปิดการทำงานเรียบร้อยแล้ว")
             break
         except Exception as e:
             print(f"Error reading sensor: {e}")

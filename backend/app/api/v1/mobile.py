@@ -56,9 +56,10 @@ async def get_farmer_mobile_summary(
         ec = round(latest.soil_ec_ds_m or 0.58, 2)
         k = round(latest.soil_k_mg_kg or 265.0, 0)
         ph = round(latest.soil_ph or 6.2, 1)
-        temp = round(latest.air_temp_c or 31.0, 1)
-        rh = round(latest.air_rh_pct or 72.0, 0)
-        wind = round(latest.wind_speed_kmh or 12.5, 1)
+        temp = round(latest.air_temp_c or 27.7, 1)
+        rh = round(latest.air_rh_pct or 46.0, 0)
+        lux = round(latest.light_lux or 0.0, 0)
+        wind = round(latest.wind_speed_kmh or 8.5, 1)
     else:
         sim = simulator_instance.step()
         moisture = sim["soil_moisture_pct"]
@@ -67,6 +68,7 @@ async def get_farmer_mobile_summary(
         ph = sim["soil_ph"]
         temp = sim["air_temp_c"]
         rh = sim["air_rh_pct"]
+        lux = sim.get("light_lux", 0.0)
         wind = sim["wind_speed_kmh"]
 
     # Actuators
@@ -93,9 +95,9 @@ async def get_farmer_mobile_summary(
     pump_str = "ON" if (pump_water and pump_water.is_active) else "OFF"
     fert_str = "ON" if (pump_fert and pump_fert.is_active) else "OFF"
 
-    # Virtual LCD 2004 4-line content (Exact match with physical LCD!)
+    # Virtual LCD 2004 4-line content with Real Light Lux & Weather!
     lcd_lines = [
-        f"T:{temp:4.1f}C  RH:{rh:2.0f}% S:3",
+        f"T:{temp:4.1f}C RH:{rh:2.0f}% L:{lux:4.0f}",
         f"Soil:{moisture:4.1f}% pH:{ph:3.1f}",
         f"EC:{ec:4.2f} K:{k:3.0f}ppm",
         f"P:{pump_str} F:{fert_str} Z:{active_zones_str}"
@@ -159,6 +161,7 @@ async def get_farmer_mobile_summary(
         "weather": {
             "temp_c": temp,
             "rh_pct": rh,
+            "light_lux": lux,
             "wind_speed_kmh": wind
         },
         "water_recommendation": {

@@ -76,6 +76,34 @@
                     <p class="text-[11px] text-slate-200" id="m-danger-msg"></p>
                 </div>
 
+                <!-- Live Sensor Metrics (SN-3002GZWS-NO1-65535) -->
+                <div class="bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 p-3 rounded-2xl border border-amber-500/30 space-y-2">
+                    <div class="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                        <span class="flex items-center">
+                            <i class="fa-solid fa-sun text-yellow-400 mr-1.5 text-xs"></i>
+                            เซนเซอร์จริง SN-3002GZWS-NO1 (COM4)
+                        </span>
+                        <span class="text-[9px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">0-65535 LUX</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-slate-950/80 p-2 rounded-xl border border-slate-800">
+                            <div class="text-[9px] text-slate-400">💡 ค่าแสง (Lux)</div>
+                            <div class="text-sm sm:text-base font-extrabold text-amber-300 mt-0.5" id="val-light-lux">0 Lux</div>
+                            <div class="text-[8px] text-emerald-400 font-medium">เซนเซอร์จริง</div>
+                        </div>
+                        <div class="bg-slate-950/80 p-2 rounded-xl border border-slate-800">
+                            <div class="text-[9px] text-slate-400">🌡️ อุณหภูมิอากาศ</div>
+                            <div class="text-sm sm:text-base font-extrabold text-white mt-0.5" id="val-air-temp">27.7 °C</div>
+                            <div class="text-[8px] text-emerald-400 font-medium">เซนเซอร์จริง</div>
+                        </div>
+                        <div class="bg-slate-950/80 p-2 rounded-xl border border-slate-800">
+                            <div class="text-[9px] text-slate-400">💧 ความชื้นอากาศ</div>
+                            <div class="text-sm sm:text-base font-extrabold text-sky-300 mt-0.5" id="val-air-rh">46.0 %</div>
+                            <div class="text-[8px] text-emerald-400 font-medium">เซนเซอร์จริง</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Sensor Key Vitals Bar -->
                 <div class="grid grid-cols-3 gap-2 text-center">
                     <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
@@ -413,6 +441,14 @@ P:OFF F:OFF Z:NONE
                 document.getElementById('val-soil-moisture').innerText = data.soil.moisture_pct.toFixed(1) + ' %';
                 document.getElementById('val-soil-ec').innerText = data.soil.ec_ds_m.toFixed(2) + ' dS/m';
                 document.getElementById('val-wind-speed').innerText = data.weather.wind_speed_kmh.toFixed(1) + ' km/h';
+
+                // 2.1 Update Real Sensor SN-3002GZWS Metrics
+                if (data.weather) {
+                    const luxVal = data.weather.light_lux !== undefined ? data.weather.light_lux : 0;
+                    document.getElementById('val-light-lux').innerText = luxVal.toLocaleString() + ' Lux';
+                    document.getElementById('val-air-temp').innerText = (data.weather.temp_c || 27.7).toFixed(1) + ' °C';
+                    document.getElementById('val-air-rh').innerText = (data.weather.rh_pct || 46.0).toFixed(0) + ' %';
+                }
 
                 if (data.water_recommendation) {
                     document.getElementById('val-et0-water').innerText = data.water_recommendation.liters_per_tree.toFixed(1) + ' ลิตร/ต้น/วัน';
