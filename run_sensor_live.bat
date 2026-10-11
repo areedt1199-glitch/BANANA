@@ -1,15 +1,16 @@
 @echo off
 chcp 65001 > nul
+set PYTHONIOENCODING=utf-8
+title Smart Banana IoT - Live Hardware Bridge (SN-3002GZWS)
 echo ==============================================================================
-echo 🍌 Smart Banana IoT - ตัวอ่านเซนเซอร์จริง SN-3002GZWS-NO1-65535
+echo 🍌 Smart Banana IoT - Live Sensor Streamer (SN-3002GZWS-NO1-65535)
 echo ==============================================================================
 echo.
-echo * Sensor Model:   SN-3002GZWS-NO1-65535 (Light + Temp + Humidity)
-echo * Port:           COM4 (CH340 USB-to-RS485 @ 4800 bps)
-echo * Live Metrics:   ค่าแสง (0 - 65,535 Lux), อุณหภูมิอากาศ (°C), ความชื้นอากาศ (%%RH)
-echo * Streaming to:   http://localhost:8000
+echo * Sensor Model:   SN-3002GZWS-NO1 (Light + Temp + Humidity)
+echo * Port / Speed:   Auto-Detect CH340 @ 9600 bps (Slave ID 2)
+echo * Streaming to:   http://localhost:8000/api/v1/telemetry/
 echo.
-echo กำลังเริ่มดึงข้อมูลจากเซนเซอร์...
+echo กำลังดึงข้อมูลสดจากเซนเซอร์ส่งขึ้นหน้าเว็บแบบเรียลไทม์...
 echo (กด Ctrl+C หากต้องการหยุด)
 echo.
 cd /d "%~dp0"

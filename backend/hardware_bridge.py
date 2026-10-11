@@ -53,7 +53,7 @@ def calc_crc(data: bytes) -> bytes:
                 crc >>= 1
     return struct.pack('<H', crc)
 
-def read_sn3002_sensor(ser):
+def read_sn3002_sensor(ser, slave_id=2):
     """
     Read SN-3002GZWS-NO1-65535 (Light + Temperature + Humidity Transmitter)
     Register Map:
@@ -61,32 +61,40 @@ def read_sn3002_sensor(ser):
       0x0001: Temperature (0.1 °C)
       0x0002 / 0x0006: Light intensity (1 Lux, Range 0 - 65,535 Lux)
     """
-    payload = struct.pack('>BBHH', 1, 3, 0, 8)
-    frame = payload + calc_crc(payload)
-    ser.reset_input_buffer()
-    ser.write(frame)
-    time.sleep(0.12)
-    resp = ser.read(32)
+    # Check configured slave_id first, then fallback to 2, 1, 255
+    target_ids = [slave_id] if slave_id in [1, 2] else [slave_id, 2, 1]
+    if 2 not in target_ids:
+        target_ids.append(2)
+    if 1 not in target_ids:
+        target_ids.append(1)
 
-    if len(resp) >= 9 and resp[1] == 3:
-        n = resp[2] // 2
-        vals = struct.unpack(f'>{n}H', resp[3:3+resp[2]])
-        humidity = round(vals[0] / 10.0, 1)
-        temp = round(vals[1] / 10.0, 1)
+    for tid in target_ids:
+        payload = struct.pack('>BBHH', tid, 3, 0, 8)
+        frame = payload + calc_crc(payload)
+        ser.reset_input_buffer()
+        ser.write(frame)
+        time.sleep(0.12)
+        resp = ser.read(32)
 
-        # Light Lux from Register 2 (or 6 if 2 is 0)
-        lux = vals[2]
-        if lux == 0 and len(vals) > 6 and vals[6] > 0:
-            lux = vals[6]
+        if len(resp) >= 9 and resp[1] == 3:
+            n = resp[2] // 2
+            vals = struct.unpack(f'>{n}H', resp[3:3+resp[2]])
+            humidity = round(vals[0] / 10.0, 1)
+            temp = round(vals[1] / 10.0, 1)
 
-        solar_rad = round(lux * 0.0079, 1) # Approximate W/m2 from Lux
+            # Light Lux from Register 2 (or 6 if 2 is 0)
+            lux = vals[2]
+            if lux == 0 and len(vals) > 6 and vals[6] > 0:
+                lux = vals[6]
 
-        return {
-            "light_lux": float(lux),
-            "air_temp_c": float(temp),
-            "air_rh_pct": float(humidity),
-            "solar_radiation_w_m2": solar_rad
-        }
+            solar_rad = round(lux * 0.0079, 1) # Approximate W/m2 from Lux
+
+            return {
+                "light_lux": float(lux),
+                "air_temp_c": float(temp),
+                "air_rh_pct": float(humidity),
+                "solar_radiation_w_m2": solar_rad
+            }
     return None
 
 def fetch_remote_device_config(device_id):
@@ -128,12 +136,14 @@ def run_bridge():
 
     while True:
         try:
-            # Re-sync offsets periodically
+            # Re-sync offsets and slave_id periodically
             if sample_count % 10 == 0:
                 remote_cfg = fetch_remote_device_config(DEVICE_ID)
                 offsets = remote_cfg.get("offsets", {}) if remote_cfg else {}
+                current_slave_id = remote_cfg.get("modbus_slave_id", 2) if remote_cfg else 2
+
             # 1. Read real sensor SN-3002GZWS from COM4
-            sensor_data = read_sn3002_sensor(ser)
+            sensor_data = read_sn3002_sensor(ser, slave_id=current_slave_id)
             if not sensor_data:
                 print("⏳ กำลังรอสัญญาณข้อมูลจากเซนเซอร์ SN-3002GZWS บน COM4...")
                 time.sleep(2)
