@@ -123,6 +123,21 @@ def read_soil_7in1(ser: serial.Serial, slave_id: int):
         temp_raw = raw_vals[1]
         if temp_raw > 32767:
             temp_raw -= 65536
+        n_val = raw_vals[4]
+        p_val = raw_vals[5]
+        k_val = raw_vals[6]
+
+        # ตรวจสอบเพิ่มเติมที่ Register 0x001E (มาตรฐาน NPK)
+        try:
+            f_npk = build_modbus_frame(slave_id, 0x03, 0x001E, 0x0003)
+            r_npk = send_modbus_cmd(ser, f_npk, timeout_ms=150)
+            if r_npk and len(r_npk) >= 9 and r_npk[1] == 0x03 and check_crc(r_npk):
+                npk_v = struct.unpack('>3H', r_npk[3:9])
+                if any(x > 0 for x in npk_v):
+                    n_val, p_val, k_val = npk_v[0], npk_v[1], npk_v[2]
+        except Exception:
+            pass
+
         return {
             "model": "SN-3002-TR-NPK-NO1",
             "type": "soil",
@@ -130,10 +145,10 @@ def read_soil_7in1(ser: serial.Serial, slave_id: int):
             "temp": round(temp_raw / 10.0, 1),
             "ec": raw_vals[2],
             "ec_ds_m": round(raw_vals[2] / 1000.0, 3),
-            "ph": round(raw_vals[3] / 10.0, 1) if raw_vals[3] > 0 else 6.5,
-            "nitrogen": raw_vals[4] if raw_vals[4] > 0 else 85,
-            "phosphorus": raw_vals[5] if raw_vals[5] > 0 else 42,
-            "potassium": raw_vals[6] if raw_vals[6] > 0 else 265,
+            "ph": round(raw_vals[3] / 10.0, 1),
+            "nitrogen": n_val,
+            "phosphorus": p_val,
+            "potassium": k_val,
             "raw_vals": raw_vals,
             "raw_hex": resp.hex(' ').upper()
         }
@@ -196,13 +211,13 @@ def scan_rs485_bus(port_name: str, test_baud: int = 9600, max_id: int = 10):
                         "model": "SN-3002-TR-NPK-NO1 (Soil Sensor - Idle in Air)",
                         "data": {
                             "moisture": 0.0,
-                            "temp": 28.5,
+                            "temp": 0.0,
                             "ec": 0,
                             "ec_ds_m": 0.0,
-                            "ph": 6.5,
-                            "nitrogen": 85,
-                            "phosphorus": 42,
-                            "potassium": 265,
+                            "ph": 0.0,
+                            "nitrogen": 0,
+                            "phosphorus": 0,
+                            "potassium": 0,
                             "raw_hex": resp_id.hex(' ').upper()
                         }
                     })

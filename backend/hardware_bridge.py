@@ -115,20 +115,32 @@ def read_sn3002_soil_sensor(ser, slave_id=3):
             vals = struct.unpack(f'>{n}H', resp[3:3+resp[2]])
             
             raw_moist = vals[0] / 10.0
-            raw_temp = vals[1] / 10.0 if len(vals) > 1 else 0.0
+            raw_temp = (vals[1] / 10.0) if len(vals) > 1 and vals[1] <= 32767 else ((vals[1] - 65536) / 10.0 if len(vals) > 1 else 0.0)
             raw_ec = (vals[2] / 1000.0) if len(vals) > 2 else 0.0
-            raw_ph = (vals[3] / 10.0) if len(vals) > 3 and vals[3] > 0 else 6.5
-            raw_n = float(vals[4]) if len(vals) > 4 and vals[4] > 0 else 85.0
-            raw_p = float(vals[5]) if len(vals) > 5 and vals[5] > 0 else 42.0
-            raw_k = float(vals[6]) if len(vals) > 6 and vals[6] > 0 else 265.0
+            raw_ph = (vals[3] / 10.0) if len(vals) > 3 else 0.0
+            raw_n = float(vals[4]) if len(vals) > 4 else 0.0
+            raw_p = float(vals[5]) if len(vals) > 5 else 0.0
+            raw_k = float(vals[6]) if len(vals) > 6 else 0.0
 
-            # ถ้าเซนเซอร์วางบนโต๊ะ (อยู่นอกดิน) วัดได้ 0
-            # จัดเตรียมค่า fallback อุณหภูมิดินตามสภาพอากาศหากอ่านได้ 0
-            soil_temp = raw_temp if raw_temp > 0 else 28.5
+            # ตรวจสอบเพิ่มเติมหากเป็นรุ่น NPK มาตรฐาน Reg 0x001E
+            try:
+                p_npk = struct.pack('>BBHH', tid, 3, 0x001E, 3)
+                ser.reset_input_buffer()
+                ser.write(p_npk + calc_crc(p_npk))
+                time.sleep(0.06)
+                r_npk = ser.read(32)
+                if len(r_npk) >= 9 and r_npk[1] == 3 and check_crc(r_npk):
+                    npk_vals = struct.unpack('>3H', r_npk[3:9])
+                    if any(v > 0 for v in npk_vals):
+                        raw_n = float(npk_vals[0])
+                        raw_p = float(npk_vals[1])
+                        raw_k = float(npk_vals[2])
+            except Exception:
+                pass
 
             return {
                 "soil_moisture_pct": round(raw_moist, 1),
-                "soil_temp_c": round(soil_temp, 1),
+                "soil_temp_c": round(raw_temp, 1),
                 "soil_ec_ds_m": round(raw_ec, 3),
                 "soil_ph": round(raw_ph, 1),
                 "soil_n_mg_kg": round(raw_n, 1),
@@ -207,13 +219,13 @@ def run_bridge():
                 }
             if not soil_data:
                 soil_data = {
-                    "soil_moisture_pct": 74.8,
-                    "soil_temp_c": 28.5,
-                    "soil_ec_ds_m": 0.58,
-                    "soil_ph": 6.2,
-                    "soil_n_mg_kg": 85.0,
-                    "soil_p_mg_kg": 42.0,
-                    "soil_k_mg_kg": 265.0,
+                    "soil_moisture_pct": 0.0,
+                    "soil_temp_c": 0.0,
+                    "soil_ec_ds_m": 0.0,
+                    "soil_ph": 0.0,
+                    "soil_n_mg_kg": 0.0,
+                    "soil_p_mg_kg": 0.0,
+                    "soil_k_mg_kg": 0.0,
                     "is_soil_sensor_connected": False
                 }
 
@@ -241,13 +253,13 @@ def run_bridge():
                     s_m = soil_data['soil_moisture_pct']
                     s_ec = soil_data['soil_ec_ds_m']
                     s_ph = soil_data['soil_ph']
+                    s_n = soil_data['soil_n_mg_kg']
+                    s_p = soil_data['soil_p_mg_kg']
                     s_k = soil_data['soil_k_mg_kg']
-
-                    status_soil_txt = f"{s_m:.1f}% (อยู่นอกดิน)" if s_m == 0.0 else f"{s_m:.1f}%"
 
                     print(f"\n[{now_str}] 🛰️ [Dual Sensor Bus Live Streams - HTTP 200 OK]:")
                     print(f"    ☀️ สภาพอากาศ (SN-3002-GZWS ID 2): แสง: {lux:,.0f} Lux | อุณหภูมิ: {air_t:.1f}°C | ความชื้น: {air_rh:.1f}%")
-                    print(f"    🌱 ดินจริง   (SN-3002-TR-NPK ID 3): ชื้น: {status_soil_txt} | EC: {s_ec:.3f} dS/m | pH: {s_ph:.1f} | K: {s_k:.0f} ppm")
+                    print(f"    🌱 ธาตุอาหาร (SN-3002-TR-NPK ID 3): N: {s_n:.0f} | P: {s_p:.0f} | K: {s_k:.0f} mg/kg | ชื้น: {s_m:.1f}% | EC: {s_ec:.3f}")
                 else:
                     print(f"[{now_str}] Backend HTTP {res.status_code}: {res.text}")
             except Exception as ex:
