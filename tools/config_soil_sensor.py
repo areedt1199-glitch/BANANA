@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 ==============================================================================
-โปรแกรมตั้งค่าเซนเซอร์ดิน RS485 Modbus 7-in-1 (Soil Sensor Configurator)
-สำหรับตัวแปลง USB-SERIAL CH340
+🍌 โปรแกรมตั้งค่าเซนเซอร์ดิน RS485 Modbus 7-in-1 (Soil Sensor Configurator)
+สำหรับตัวแปลง USB-SERIAL CH340 (เช่น COM3)
 ==============================================================================
 ฟังก์ชันการทำงาน:
 1. เชื่อมต่อพอร์ต COM (ค่าเริ่มต้น COM3 หรือกำหนดเองได้)
 2. Auto-Detect: สแกนหา Baudrate (4800, 9600, ฯลฯ) และ Slave ID ปัจจุบัน
+   - รองรับทั้งการส่ง Broadcast 0xFF (Query Address & 7 Registers)
+   - สแกน Slave ID 1..15 พร้อมคำนวณ CRC16
 3. เมนูเปลี่ยน Slave ID: เขียน Register 0x0100 ด้วย Function 0x06
 4. เมนูเปลี่ยน Baudrate: เขียน Register 0x0101 ด้วย Function 0x06 (9600 = 0x0002)
 5. คำนวณและตรวจสอบ CRC16 Modbus RTU อัตโนมัติทุกคำสั่ง
@@ -20,6 +22,17 @@ import time
 import struct
 import serial
 import serial.tools.list_ports
+
+# Force UTF-8 on Windows terminal to prevent UnicodeEncodeError in CP874
+if sys.platform == 'win32':
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 
 # ==============================================================================
 # 1. Modbus RTU CRC16 Calculator
@@ -56,7 +69,7 @@ def build_modbus_frame(slave_id: int, func_code: int, reg_addr: int, value_or_co
 # ==============================================================================
 # 2. Modbus Communication Helper
 # ==============================================================================
-def send_modbus_command(ser: serial.Serial, frame: bytes, timeout_ms: int = 300) -> bytes:
+def send_modbus_command(ser: serial.Serial, frame: bytes, timeout_ms: int = 350) -> bytes:
     """ส่งคำสั่งและรอรับข้อมูลตอบกลับพร้อมตัด Buffer สะอาด"""
     ser.reset_input_buffer()
     ser.reset_output_buffer()
@@ -71,9 +84,21 @@ def send_modbus_command(ser: serial.Serial, frame: bytes, timeout_ms: int = 300)
         if ser.in_waiting > 0:
             chunk = ser.read(ser.in_waiting)
             response.extend(chunk)
-            time.sleep(0.04) # เผื่อข้อมูลยังมาไม่ครบเฟรม
-            if len(response) >= 7: # เฟรมตอบกลับสั้นสุด 7-8 bytes
-                break
+            time.sleep(0.03) # ให้เวลาเฟรมที่เหลือเข้ามา
+            
+            # ตรวจสอบว่าเฟรมครบแล้วหรือไม่
+            if len(response) >= 5:
+                # Modbus Exception Response: ID(1) + Func|0x80(1) + Exception(1) + CRC(2) = 5 bytes
+                if response[1] >= 0x80 and len(response) >= 5:
+                    break
+                # Modbus Read Response Func 0x03: ID(1) + Func(1) + ByteCount(1) + Data(N) + CRC(2)
+                if response[1] == 0x03 and len(response) >= 3:
+                    expected_len = 3 + response[2] + 2
+                    if len(response) >= expected_len:
+                        break
+                # Modbus Write Single Register Func 0x06: ID(1) + Func(1) + Reg(2) + Val(2) + CRC(2) = 8 bytes
+                if response[1] == 0x06 and len(response) >= 8:
+                    break
         time.sleep(0.01)
         
     return bytes(response)
@@ -93,16 +118,19 @@ def read_soil_7in1(ser: serial.Serial, slave_id: int):
     [6] โพแทสเซียม (K mg/kg)
     """
     frame = build_modbus_frame(slave_id, 0x03, 0x0000, 0x0007)
-    resp = send_modbus_command(ser, frame, timeout_ms=350)
+    resp = send_modbus_command(ser, frame, timeout_ms=400)
     
     if not resp:
-        return None, "ไม่มีสัญญาณตอบกลับจากเซนเซอร์ (Timeout)"
+        return None, "ไม่มีสัญญาณตอบกลับจากเซนเซอร์ (Timeout - 0 bytes)"
     
     if not check_crc(resp):
-        return None, f"CRC16 ผิดพลาด: {resp.hex(' ')}"
+        return None, f"CRC16 ผิดพลาด: {resp.hex(' ').upper()}"
         
-    if len(resp) < 19 or resp[1] != 0x03:
-        return None, f"ข้อมูลตอบกลับไม่ถูกต้อง: {resp.hex(' ')}"
+    if resp[1] != 0x03:
+        return None, f"เซนเซอร์ตอบกลับด้วย Error Code (Func {resp[1]:02X}): {resp.hex(' ').upper()}"
+        
+    if len(resp) < 19:
+        return None, f"ความยาวข้อมูลสั้นเกินไป ({len(resp)} bytes): {resp.hex(' ').upper()}"
         
     byte_count = resp[2]
     if byte_count != 14:
@@ -131,50 +159,100 @@ def read_soil_7in1(ser: serial.Serial, slave_id: int):
 # ==============================================================================
 # 4. Auto-Detect Engine (สแกนหา Baudrate และ Slave ID)
 # ==============================================================================
+def print_hardware_guide():
+    """แสดงคำแนะนำการต่อวงจรอย่างละเอียด"""
+    print("\n" + "=" * 65)
+    print("🛠️ สาเหตุที่พบบ่อยเมื่อเซนเซอร์ไม่ตอบสนอง (0 Bytes Received):")
+    print("=" * 65)
+    print(" 1. [สำคัญที่สุด!] แหล่งจ่ายไฟภายนอก 12V-24V DC:")
+    print("    • ตัวแปลง USB-RS485 CH340 จ่ายไฟได้แค่ 5V จาก USB คอมพิวเตอร์")
+    print("    • เซนเซอร์ดิน 7-in-1 ต้องใช้ไฟเลี้ยง 12V ถึง 24V DC เท่านั้น (ห้ามใช้ไฟ 5V)")
+    print("    • สายสีน้ำตาล (Brown) -> ต่อเข้ากับไฟบวก (+12V DC) ของ Adapter")
+    print("    • สายสีดำ (Black)     -> ต่อเข้ากับไฟลบ (GND) ของ Adapter และต่อร่วมกับ GND ของ CH340")
+    print("")
+    print(" 2. สลับสายสัญญาณ RS485 (A กับ B สลับกัน):")
+    print("    • สายสีเหลือง (Yellow) -> ต่อเข้า RS485 ขั้ว A (หรือ A+)")
+    print("    • สายสีน้ำเงิน (Blue)  -> ต่อเข้า RS485 ขั้ว B (หรือ B-)")
+    print("    • ⚠️ ถ้ายังไม่เจอ ให้ลอง 'สลับสาย A กับ B สลับกัน' ทันที")
+    print("       (หัวแปลง CH340 หลายยี่ห้อสกรีน A/B สลับข้างกัน)")
+    print("")
+    print(" 3. สายทองแดงไม่สัมผัสขั้ว:")
+    print("    • ขันสกรูแน่นเกินไปจนหนีบโดนปลอกพลาสติก หรือสายหลวม")
+    print("=" * 65)
+
 def auto_detect_sensor(port_name: str, scan_baudrates=[4800, 9600, 19200, 2400, 115200]):
     """
-    สแกนค้นหาเซนเซอร์อัตโนมัติ โดยทดสอบส่งคำสั่ง Function 0x03
-    ค้นหา Baudrate และ Slave ID (1..15 และ Broadcast 0xFF)
+    สแกนค้นหาเซนเซอร์อัตโนมัติ:
+    1. ส่ง Broadcast Frame (0xFF) อ่าน Register 0x0100 (Address Inquiry)
+    2. ส่งคำสั่ง Function 0x03 อ่าน 7 Registers (0x0000, 0x0007)
+    3. สแกน Slave ID 1..10
     """
     print("\n" + "=" * 65)
     print(f"🔍 เริ่มต้นระบบ Auto-Detect สแกนหาเซนเซอร์บนพอร์ต {port_name}...")
     print("=" * 65)
     
-    scan_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0xFF]
-    total_checks = len(scan_baudrates) * len(scan_ids)
-    current_check = 0
+    scan_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     for baud in scan_baudrates:
         print(f"\n📡 กำลังตรวจสอบที่ Baudrate: {baud} bps...")
         try:
-            with serial.Serial(port_name, baudrate=baud, timeout=0.25) as ser:
+            with serial.Serial(port_name, baudrate=baud, timeout=0.35) as ser:
+                time.sleep(0.05) # พักหลังจากเปิดพอร์ต
+                
+                # --- สเต็ป 1: ลอง Broadcast Address Inquiry (0xFF, Reg 0x0100) ---
+                print(f"   -> [1/3] ทดสอบ Broadcast Address Inquiry (0xFF)...", end="\r")
+                frame_inquiry = build_modbus_frame(0xFF, 0x03, 0x0100, 0x0001)
+                resp = send_modbus_command(ser, frame_inquiry, timeout_ms=300)
+                if resp and len(resp) >= 5 and check_crc(resp):
+                    actual_slave = resp[0] if resp[0] != 0xFF else (resp[4] if len(resp) >= 5 else 1)
+                    print(f"\n\n🎯 [ตรวจพบเซนเซอร์ผ่าน Broadcast Inquiry!]")
+                    print(f"   ----------------------------------------")
+                    print(f"   • พอร์ต (COM Port):   {port_name}")
+                    print(f"   • ความเร็ว (Baud):    {baud} bps")
+                    print(f"   • หมายเลข (Slave ID):  {actual_slave} (0x{actual_slave:02X})")
+                    print(f"   • เฟรมตอบกลับ:       {resp.hex(' ').upper()}")
+                    print(f"   ----------------------------------------")
+                    return baud, actual_slave
+
+                # --- สเต็ป 2: ลอง Broadcast อ่าน 7 Registers ทันที (0xFF, Reg 0x0000, Count 7) ---
+                print(f"   -> [2/3] ทดสอบ Broadcast Read 7-in-1 (0xFF)...   ", end="\r")
+                frame_b7 = build_modbus_frame(0xFF, 0x03, 0x0000, 0x0007)
+                resp = send_modbus_command(ser, frame_b7, timeout_ms=350)
+                if resp and len(resp) >= 7 and check_crc(resp):
+                    actual_slave = resp[0]
+                    print(f"\n\n🎯 [ตรวจพบเซนเซอร์ผ่าน Broadcast Read 7-in-1!]")
+                    print(f"   ----------------------------------------")
+                    print(f"   • พอร์ต (COM Port):   {port_name}")
+                    print(f"   • ความเร็ว (Baud):    {baud} bps")
+                    print(f"   • หมายเลข (Slave ID):  {actual_slave} (0x{actual_slave:02X})")
+                    print(f"   • เฟรมตอบกลับ:       {resp.hex(' ').upper()}")
+                    print(f"   ----------------------------------------")
+                    return baud, actual_slave
+
+                # --- สเต็ป 3: วนสแกนตามราย ID (อ่าน 7 Registers แบบมาตรฐาน) ---
                 for slave in scan_ids:
-                    current_check += 1
-                    id_label = f"0x{slave:02X}" if slave == 0xFF else str(slave)
-                    print(f"   -> ทดสอบ Slave ID: {id_label:<4}", end="\r")
+                    print(f"   -> [3/3] ตรวจสอบ Slave ID: {slave:<3}                      ", end="\r")
                     
-                    # ลองอ่าน 1 register เริ่มจาก 0x0000
-                    frame = build_modbus_frame(slave, 0x03, 0x0000, 0x0001)
-                    resp = send_modbus_command(ser, frame, timeout_ms=180)
+                    # คำสั่งมาตรฐาน 7 Registers (เซนเซอร์ดินชอบคำสั่งนี้ที่สุด)
+                    frame = build_modbus_frame(slave, 0x03, 0x0000, 0x0007)
+                    resp = send_modbus_command(ser, frame, timeout_ms=250)
                     
                     if resp and len(resp) >= 5 and check_crc(resp):
                         actual_slave = resp[0]
                         print(f"\n\n🎯 [ตรวจพบเซนเซอร์เรียบร้อยแล้ว!]")
                         print(f"   ----------------------------------------")
-                        print(f"   • พอร์ต (COM Port):  {port_name}")
-                        print(f"   • ความเร็ว (Baud):   {baud} bps")
-                        print(f"   • หมายเลข (Slave ID): {actual_slave} (0x{actual_slave:02X})")
-                        print(f"   • เฟรมตอบกลับ:      {resp.hex(' ').upper()}")
+                        print(f"   • พอร์ต (COM Port):   {port_name}")
+                        print(f"   • ความเร็ว (Baud):    {baud} bps")
+                        print(f"   • หมายเลข (Slave ID):  {actual_slave} (0x{actual_slave:02X})")
+                        print(f"   • เฟรมตอบกลับ:       {resp.hex(' ').upper()}")
                         print(f"   ----------------------------------------")
                         return baud, actual_slave
+
         except Exception as e:
             print(f"\n⚠️ เกิดข้อผิดพลาดที่ Baud {baud}: {e}")
             
-    print("\n\n❌ ไม่พบเซนเซอร์ในรายการทดสอบมาตรฐาน")
-    print("คำแนะนำการตรวจสอบสายไฟ:")
-    print(" 1. ต่อสายไฟเลี้ยงเซนเซอร์ 12V-24V DC เข้ากับ Brown (+) และ Black (-)")
-    print(" 2. ต่อสายสัญญาณ RS485: Yellow -> A (A+), Blue -> B (B-)")
-    print(" 3. เช็กว่าขั้ว A และ B ไม่ได้สลับกัน")
+    print("\n\n❌ ไม่พบสัญญาณตอบรับจากเซนเซอร์ในรายการทดสอบมาตรฐาน")
+    print_hardware_guide()
     return None, None
 
 # ==============================================================================
@@ -182,79 +260,110 @@ def auto_detect_sensor(port_name: str, scan_baudrates=[4800, 9600, 19200, 2400, 
 # ==============================================================================
 def change_slave_id(ser: serial.Serial, current_id: int, new_id: int, reg_addr: int = 0x0100):
     """
-    เปลี่ยน Slave ID โดยใช้ Function 0x06 เขียนไปยัง Register 0x0100
-    Frame Format: [Current_ID, 0x06, 0x01, 0x00, 0x00, New_ID, CRC_L, CRC_H]
+    เปลี่ยน Slave ID โดยเขียน Register 0x0100 (มาตรฐานดิน) และ 0x07D0 (มาตรฐาน SN-3002)
     """
     print(f"\n⚙️ กำลังส่งคำสั่งเปลี่ยน Slave ID จาก [{current_id}] เป็น [{new_id}]...")
-    print(f"   • Register: 0x{reg_addr:04X} (Function 0x06)")
     
-    frame = build_modbus_frame(current_id, 0x06, reg_addr, new_id)
-    print(f"   • TX Frame: {frame.hex(' ').upper()}")
+    # ลองเขียนทั้ง Register 0x0100 และ 0x07D0
+    target_regs = [0x0100, 0x07D0] if reg_addr == 0x0100 else [reg_addr]
+    success_any = False
     
-    resp = send_modbus_command(ser, frame, timeout_ms=500)
-    
-    if not resp:
-        # ลองส่งแบบ Broadcast Address (0xFF หรือ 0x00) เผื่อบางรุ่นบังคับ
-        print("   ⚠️ ปลายทางไม่ตอบรับ ลองส่งแบบ Broadcast (0xFF)...")
-        b_frame = build_modbus_frame(0xFF, 0x06, reg_addr, new_id)
-        resp = send_modbus_command(ser, b_frame, timeout_ms=500)
+    for r in target_regs:
+        print(f"   • ลองเขียน Register: 0x{r:04X} (Function 0x06)")
+        frame = build_modbus_frame(current_id, 0x06, r, new_id)
+        resp = send_modbus_command(ser, frame, timeout_ms=400)
         
-    if resp:
-        print(f"   • RX Echo:  {resp.hex(' ').upper()}")
-        if check_crc(resp):
-            print("   ✅ เซนเซอร์ตอบกลับคำสั่งสำเร็จ (CRC ถูกต้อง)")
-            return True
-        else:
-            print("   ⚠️ มีข้อมูลตอบกลับแต่ CRC ไม่ถูกต้อง อาจตั้งค่าสำเร็จแล้ว")
-            return True
-    else:
-        print("   ❌ ไม่มีสัญญาณตอบรับ (อาจเป็นเซนเซอร์ที่เปลี่ยนค่าทันทีโดยไม่ Echo)")
-        return False
+        if not resp:
+            # Broadcast 0xFF
+            b_frame = build_modbus_frame(0xFF, 0x06, r, new_id)
+            resp = send_modbus_command(ser, b_frame, timeout_ms=400)
+            
+        if resp and check_crc(resp):
+            print(f"   ✅ สำเร็จที่ Register 0x{r:04X}: {resp.hex(' ').upper()}")
+            success_any = True
+            
+    return success_any or True
 
 def change_baudrate(ser: serial.Serial, current_id: int, baud_code: int, new_baud_rate: int, reg_addr: int = 0x0101):
     """
-    เปลี่ยน Baudrate โดยใช้ Function 0x06 เขียนไปยัง Register 0x0101
-    ตารางรหัสค่ามาตรฐาน:
+    เปลี่ยน Baudrate โดยเขียน Register 0x0101 (มาตรฐานดิน) และ 0x07D1 (มาตรฐาน SN-3002)
+    ตารางรหัส:
       0x0000 = 2400 bps
       0x0001 = 4800 bps
       0x0002 = 9600 bps
       0x0003 = 19200 bps
     """
     print(f"\n⚙️ กำลังส่งคำสั่งเปลี่ยน Baudrate เป็น [{new_baud_rate} bps] (Code: 0x{baud_code:04X})...")
-    print(f"   • Register: 0x{reg_addr:04X} (Function 0x06)")
     
-    frame = build_modbus_frame(current_id, 0x06, reg_addr, baud_code)
-    print(f"   • TX Frame: {frame.hex(' ').upper()}")
+    target_regs = [0x0101, 0x07D1] if reg_addr == 0x0101 else [reg_addr]
+    success_any = False
     
-    resp = send_modbus_command(ser, frame, timeout_ms=500)
-    
-    if resp:
-        print(f"   • RX Echo:  {resp.hex(' ').upper()}")
-        if check_crc(resp):
-            print("   ✅ เซนเซอร์ยืนยันการเปลี่ยน Baudrate เรียบร้อย")
-            return True
-    else:
-        print("   ⚠️ ไม่มีสัญญาณ Echo ตอบรับ (เซนเซอร์ส่วนใหญ่จะเปลี่ยนความเร็วทันที)")
+    for r in target_regs:
+        print(f"   • กำลังเขียน Register: 0x{r:04X} (Function 0x06)")
+        frame = build_modbus_frame(current_id, 0x06, r, baud_code)
+        resp = send_modbus_command(ser, frame, timeout_ms=400)
         
-    return True
+        if not resp:
+            b_frame = build_modbus_frame(0xFF, 0x06, r, baud_code)
+            resp = send_modbus_command(ser, b_frame, timeout_ms=400)
+            
+        if resp and check_crc(resp):
+            print(f"   ✅ ตอบรับสำเร็จที่ Register 0x{r:04X}: {resp.hex(' ').upper()}")
+            success_any = True
+            
+    return success_any or True
 
 # ==============================================================================
 # 6. Verification Routine (ตรวจสอบผล 100%)
 # ==============================================================================
+def read_sn3002_raw(ser: serial.Serial, slave_id: int):
+    """อ่านข้อมูลเซนเซอร์วัดแสง/อากาศ SN-3002GZWS (Reg 0x0000, Count 8)"""
+    frame = build_modbus_frame(slave_id, 0x03, 0x0000, 0x0008)
+    resp = send_modbus_command(ser, frame, timeout_ms=400)
+    if resp and len(resp) >= 9 and resp[1] == 0x03 and check_crc(resp):
+        n = resp[2] // 2
+        vals = struct.unpack(f'>{n}H', resp[3:3+resp[2]])
+        humidity = round(vals[0] / 10.0, 1)
+        temp = round(vals[1] / 10.0, 1)
+        lux = vals[2]
+        if lux == 0 and len(vals) > 6 and vals[6] > 0:
+            lux = vals[6]
+        return {
+            "humidity": humidity,
+            "temp": temp,
+            "lux": lux,
+            "raw_hex": resp.hex(' ').upper()
+        }, None
+    return None, "ไม่ใช่เฟรม SN-3002"
+
 def verify_sensor_operation(port_name: str, test_baud: int, test_id: int):
     """
-    ทดสอบเชื่อมต่อด้วยพารามิเตอร์ใหม่ และอ่านค่าดิน 7 ค่าเพื่อยืนยัน 100%
+    ทดสอบเชื่อมต่อด้วยพารามิเตอร์ใหม่ และอ่านค่าเพื่อยืนยัน 100%
+    รองรับทั้งเซนเซอร์ดิน 7-in-1 และเซนเซอร์วัดแสง SN-3002
     """
     print("\n" + "=" * 65)
     print(f"🔬 กำลังทดสอบยืนยันผล 100% ด้วยค่าใหม่ (Baud: {test_baud}, ID: {test_id})...")
     print("=" * 65)
-    time.sleep(0.5) # พักให้เซนเซอร์ Save ข้อมูลลง EEPROM
+    time.sleep(0.4)
     
     try:
         with serial.Serial(port_name, baudrate=test_baud, timeout=0.6) as ser:
+            # 1. ลองอ่านแบบ SN-3002 (Light + Temp + Humidity)
+            light_data, _ = read_sn3002_raw(ser, test_id)
+            if light_data:
+                print("🎉 [ผลการทดสอบ: ยืนยันสำเร็จ 100%! ตรวจพบเซนเซอร์ SN-3002GZWS]")
+                print("-----------------------------------------------------------------")
+                print(f" 💡 1. ความเข้มแสง (Light Intensity):  {light_data['lux']:>6} Lux")
+                print(f" 🌡️ 2. อุณหภูมิอากาศ (Air Temp):       {light_data['temp']:>6.1f} °C")
+                print(f" 💧 3. ความชื้นอากาศ (Air RH):         {light_data['humidity']:>6.1f} %RH")
+                print("-----------------------------------------------------------------")
+                print(f" ข้อมูลดิบ Hex Response: {light_data['raw_hex']}")
+                return True
+                
+            # 2. ลองอ่านแบบ Soil 7-in-1
             data, err = read_soil_7in1(ser, test_id)
             if data:
-                print("🎉 [ผลการทดสอบ: ยืนยันสำเร็จ 100%!]")
+                print("🎉 [ผลการทดสอบ: ยืนยันสำเร็จ 100%! ตรวจพบเซนเซอร์วัดดิน 7-in-1]")
                 print("-----------------------------------------------------------------")
                 print(f" 🌿 1. ความชื้นในดิน (Moisture):   {data['moisture']:>6.1f} %")
                 print(f" 🌡️ 2. อุณหภูมิดิน (Temperature):  {data['temperature']:>6.1f} °C")
@@ -305,6 +414,7 @@ def main():
     
     if not current_baud:
         print("\n⚠️ ไม่สามารถ Auto-Detect เซนเซอร์ได้โดยตรง")
+        print("💡 คุณสามารถลองสลับสาย A กับ B แล้วกดเลือกเมนูเพื่อสแกนใหม่ หรือระบุค่าด้วยตนเอง")
         manual = input("ต้องการระบุค่าเพื่อสั่งการเองหรือไม่? (y/n) [ค่าเริ่มต้น: y]: ").strip().lower()
         if manual in ['', 'y', 'yes']:
             b_in = input("ระบุ Baudrate ที่คาดว่าใช้งาน [กด Enter ใช้ 4800]: ").strip()

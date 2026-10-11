@@ -136,3 +136,26 @@ class AlertResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ==========================================
+# Device & Farm Sensor Configuration Schemas
+# ==========================================
+class DeviceSensorConfigUpdate(BaseModel):
+    sensor_model: Optional[str] = "SN-3002GZWS-NO1-65535"
+    baud_rate: Optional[int] = 9600
+    modbus_slave_id: Optional[int] = 1
+    telemetry_interval_sec: Optional[int] = 30
+    temp_offset: Optional[float] = 0.0
+    rh_offset: Optional[float] = 0.0
+    lux_offset: Optional[float] = 0.0
+    ec_offset: Optional[float] = 0.0
+    ph_offset: Optional[float] = 0.0
+
+class FarmCreate(BaseModel):
+    tenant_id: Optional[str] = None
+    name: str
+    province: str
+    district: Optional[str] = "เมือง"
+    latitude: float = 14.15
+    longitude: float = 100.75
+    total_area_rai: float = 5.0

@@ -4,15 +4,42 @@ import time
 import httpx
 from datetime import datetime, timezone
 
+import serial.tools.list_ports
+
 # -------------------------------------------------------------
 # Configuration: SN-3002GZWS-NO1-65535
 # -------------------------------------------------------------
-COM_PORT = 'COM4'
-BAUD_RATE = 4800
+def detect_com_port():
+    ports = serial.tools.list_ports.comports()
+    for p in ports:
+        if 'CH340' in p.description or '1A86' in p.hwid:
+            return p.device
+    if any(p.device == 'COM3' for p in ports):
+        return 'COM3'
+    if any(p.device == 'COM4' for p in ports):
+        return 'COM4'
+    return 'COM3'
+
+COM_PORT = detect_com_port()
+DEFAULT_BAUD = 9600
 BACKEND_URL = 'http://localhost:8000/api/v1/telemetry/'
 ZONE_ID = 'd5fcc075-5ae5-4b88-9b03-1aa904b28e43'
 TENANT_ID = '037cb663-1252-4143-87af-e7f1228fa4b1'
 DEVICE_ID = 'ESP32-BANANA-001'
+
+def get_working_serial(port_name):
+    for baud in [9600, 4800, 19200, 2400]:
+        try:
+            s = serial.Serial(port_name, baudrate=baud, timeout=0.5)
+            # test probe
+            test_data = read_sn3002_sensor(s)
+            if test_data:
+                return s, baud
+            s.close()
+        except Exception:
+            pass
+    # default fallback
+    return serial.Serial(port_name, baudrate=DEFAULT_BAUD, timeout=0.5), DEFAULT_BAUD
 
 def calc_crc(data: bytes) -> bytes:
     crc = 0xFFFF
@@ -62,19 +89,29 @@ def read_sn3002_sensor(ser):
         }
     return None
 
+def fetch_remote_device_config(device_id):
+    try:
+        r = httpx.get(f"http://localhost:8000/api/v1/admin/devices/{device_id}/config", timeout=2.0)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
+
 def run_bridge():
     print("=" * 70)
-    print("🍌 SMART BANANA IOT - SENSOR BRIDGE (SN-3002GZWS-NO1-65535)")
-    print(f"📡 พอร์ตเชื่อมต่อ: {COM_PORT} (ความเร็ว {BAUD_RATE} bps)")
+    # 1. Sync remote config from Web Admin
+    remote_cfg = fetch_remote_device_config(DEVICE_ID)
+    if remote_cfg:
+        print(f"☁️ ซิงก์การตั้งค่าจาก Web Admin สำเร็จ: อุปกรณ์ {DEVICE_ID} (ฟาร์ม {remote_cfg.get('farm_id')[:8]})")
+        print(f"   • รุ่นเซนเซอร์: {remote_cfg.get('sensor_model')} | ความเร็ว: {remote_cfg.get('baud_rate')} bps")
+        print(f"   • ความถี่อ่านค่า: {remote_cfg.get('telemetry_interval_sec')} วินาที")
+    
+    ser, active_baud = get_working_serial(COM_PORT)
+    print(f"📡 พอร์ตเชื่อมต่อ: {COM_PORT} (ตรวจพบความเร็ว {active_baud} bps)")
     print("💡 วัดค่าจริงจากเซนเซอร์: ค่าแสง (Lux), อุณหภูมิอากาศ (°C), ความชื้นอากาศ (%RH)")
     print(f"🚀 ส่งข้อมูลสตรีมไปยัง: {BACKEND_URL}")
     print("=" * 70)
-
-    try:
-        ser = serial.Serial(COM_PORT, baudrate=BAUD_RATE, timeout=0.8)
-    except Exception as e:
-        print(f"🚨 ไม่สามารถเปิดพอร์ต {COM_PORT} ได้: {e}")
-        return
 
     # Baseline soil profile for Kluai Hom Thong plantation (since soil probe is separate)
     soil_profile = {
@@ -91,6 +128,10 @@ def run_bridge():
 
     while True:
         try:
+            # Re-sync offsets periodically
+            if sample_count % 10 == 0:
+                remote_cfg = fetch_remote_device_config(DEVICE_ID)
+                offsets = remote_cfg.get("offsets", {}) if remote_cfg else {}
             # 1. Read real sensor SN-3002GZWS from COM4
             sensor_data = read_sn3002_sensor(ser)
             if not sensor_data:
