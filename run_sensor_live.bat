@@ -1,18 +1,13 @@
 @echo off
 chcp 65001 > nul
 set PYTHONIOENCODING=utf-8
-title Smart Banana IoT - Live Hardware Bridge (SN-3002GZWS)
-echo ==============================================================================
-echo 🍌 Smart Banana IoT - Live Sensor Streamer (SN-3002GZWS-NO1-65535)
-echo ==============================================================================
-echo.
-echo * Sensor Model:   SN-3002GZWS-NO1 (Light + Temp + Humidity)
-echo * Port / Speed:   Auto-Detect CH340 @ 9600 bps (Slave ID 2)
-echo * Streaming to:   http://localhost:8000/api/v1/telemetry/
-echo.
-echo กำลังดึงข้อมูลสดจากเซนเซอร์ส่งขึ้นหน้าเว็บแบบเรียลไทม์...
-echo (กด Ctrl+C หากต้องการหยุด)
-echo.
+title Smart Banana IoT - Dual-Sensor Live Streamer (Weather ID 2 + Soil ID 3)
 cd /d "%~dp0"
+echo ======================================================================
+echo  Smart Banana IoT - Live Hardware Streamer (RS485 Modbus RTU Bus)
+echo  Sensor 1: SN-3002-GZWS-NO1  (Light + Weather @ Slave ID 2)
+echo  Sensor 2: SN-3002-TR-NPK-NO1 (Soil 7-in-1   @ Slave ID 3)
+echo ======================================================================
+echo.
 .\venv\Scripts\python.exe backend\hardware_bridge.py
 pause

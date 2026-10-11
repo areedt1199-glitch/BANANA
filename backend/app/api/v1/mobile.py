@@ -52,12 +52,13 @@ async def get_farmer_mobile_summary(
     latest = latest_res.scalar_one_or_none()
 
     if latest:
-        moisture = round(latest.soil_moisture_pct or 74.5, 1)
-        ec = round(latest.soil_ec_ds_m or 0.58, 2)
+        moisture = round(latest.soil_moisture_pct or 0.0, 1)
+        soil_temp = round(latest.soil_temp_c or 28.5, 1)
+        ec = round(latest.soil_ec_ds_m or 0.0, 3)
         k = round(latest.soil_k_mg_kg or 265.0, 0)
-        ph = round(latest.soil_ph or 6.2, 1)
-        temp = round(latest.air_temp_c or 27.7, 1)
-        rh = round(latest.air_rh_pct or 46.0, 0)
+        ph = round(latest.soil_ph or 6.5, 1)
+        temp = round(latest.air_temp_c or 27.9, 1)
+        rh = round(latest.air_rh_pct or 48.0, 0)
         lux = round(latest.light_lux or 0.0, 0)
         wind = round(latest.wind_speed_kmh or 8.5, 1)
     else:
@@ -154,6 +155,7 @@ async def get_farmer_mobile_summary(
         },
         "soil": {
             "moisture_pct": moisture,
+            "temp_c": soil_temp,
             "ec_ds_m": ec,
             "k_ppm": k,
             "ph": ph
