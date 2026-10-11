@@ -178,9 +178,10 @@ def get_working_serial():
 
 def run_bridge():
     print("=" * 75)
-    print("🍌 SMART BANANA IOT - DUAL SENSOR BRIDGE (RS485 BUS)")
-    print("   1. SN-3002-GZWS-NO1 (Light + Temp + Humidity) @ Slave ID 2")
-    print("   2. SN-3002-TR-NPK-NO1 (Soil Moisture + EC + pH + NPK) @ Slave ID 3")
+    print("🍌 SMART BANANA IOT - TRIPLE SENSOR BRIDGE (RS485 BUS @ 9600 bps)")
+    print("   1. ZTS-3002-TR-ECTHNPKPH-N01 (Soil 7-in-1: Moist/Temp/EC/pH) @ Slave ID 1")
+    print("   2. SN-3002-GZWS-NO1         (Light + Air Temp + Humidity)   @ Slave ID 2")
+    print("   3. SN-3002-TR-NPK-NO1       (Soil NPK Nutrients)           @ Slave ID 3")
     print("=" * 75)
 
     ser, active_port, active_baud = get_working_serial()
@@ -189,8 +190,9 @@ def run_bridge():
     print("=" * 75)
 
     sample_count = 0
+    soil_7in1_slave = 1
     weather_slave = 2
-    soil_slave = 3
+    soil_npk_slave = 3
 
     while True:
         try:
@@ -202,22 +204,27 @@ def run_bridge():
             sample_count += 1
             now_str = datetime.now().strftime("%H:%M:%S")
 
-            # 2. Read Weather Sensor (SN-3002-GZWS)
+            # 2. Read Soil 7-in-1 Sensor (ZTS-3002 @ Slave ID 1)
+            soil_1_data = read_sn3002_soil_sensor(ser, slave_id=soil_7in1_slave)
+            time.sleep(0.04)
+
+            # 3. Read Weather Sensor (SN-3002-GZWS @ Slave ID 2)
             weather_data = read_sn3002_sensor(ser, slave_id=weather_slave)
-            time.sleep(0.06)
+            time.sleep(0.04)
 
-            # 3. Read Soil Sensor (SN-3002-TR-NPK)
-            soil_data = read_sn3002_soil_sensor(ser, slave_id=soil_slave)
+            # 4. Read Soil NPK Sensor (SN-3002-TR-NPK @ Slave ID 3)
+            soil_3_data = read_sn3002_soil_sensor(ser, slave_id=soil_npk_slave)
 
-            # Fallback if one sensor momentarily times out
-            if not weather_data:
-                weather_data = {
-                    "light_lux": 450.0,
-                    "air_temp_c": 28.2,
-                    "air_rh_pct": 50.0,
-                    "solar_radiation_w_m2": 3.5
-                }
-            if not soil_data:
+            # Merge Soil Data (Priority: ZTS-3002 ID 1 for soil moisture/temp/ec/ph, SN-3002 ID 3 for NPK)
+            if soil_1_data:
+                soil_data = dict(soil_1_data)
+                if soil_3_data and any(soil_3_data.get(k, 0) > 0 for k in ['soil_n_mg_kg', 'soil_p_mg_kg', 'soil_k_mg_kg']):
+                    soil_data['soil_n_mg_kg'] = soil_3_data['soil_n_mg_kg']
+                    soil_data['soil_p_mg_kg'] = soil_3_data['soil_p_mg_kg']
+                    soil_data['soil_k_mg_kg'] = soil_3_data['soil_k_mg_kg']
+            elif soil_3_data:
+                soil_data = dict(soil_3_data)
+            else:
                 soil_data = {
                     "soil_moisture_pct": 0.0,
                     "soil_temp_c": 0.0,
@@ -229,7 +236,15 @@ def run_bridge():
                     "is_soil_sensor_connected": False
                 }
 
-            # 4. Build Unified Telemetry Payload (Combining BOTH physical sensors)
+            if not weather_data:
+                weather_data = {
+                    "light_lux": 0.0,
+                    "air_temp_c": 27.5,
+                    "air_rh_pct": 50.0,
+                    "solar_radiation_w_m2": 0.0
+                }
+
+            # 5. Build Unified Telemetry Payload (Combining ALL 3 physical sensors)
             payload = {
                 "tenant_id": TENANT_ID,
                 "zone_id": ZONE_ID,
@@ -242,24 +257,25 @@ def run_bridge():
                 "wifi_rssi_dbm": -60
             }
 
-            # 5. Post to FastAPI Backend
+            # 6. Post to FastAPI Backend
             try:
                 res = httpx.post(BACKEND_URL, json=payload, timeout=3.0)
                 if res.status_code == 200:
-                    r_json = res.json()
                     lux = weather_data['light_lux']
                     air_t = weather_data['air_temp_c']
                     air_rh = weather_data['air_rh_pct']
                     s_m = soil_data['soil_moisture_pct']
+                    s_t = soil_data['soil_temp_c']
                     s_ec = soil_data['soil_ec_ds_m']
                     s_ph = soil_data['soil_ph']
                     s_n = soil_data['soil_n_mg_kg']
                     s_p = soil_data['soil_p_mg_kg']
                     s_k = soil_data['soil_k_mg_kg']
 
-                    print(f"\n[{now_str}] 🛰️ [Dual Sensor Bus Live Streams - HTTP 200 OK]:")
-                    print(f"    ☀️ สภาพอากาศ (SN-3002-GZWS ID 2): แสง: {lux:,.0f} Lux | อุณหภูมิ: {air_t:.1f}°C | ความชื้น: {air_rh:.1f}%")
-                    print(f"    🌱 ธาตุอาหาร (SN-3002-TR-NPK ID 3): N: {s_n:.0f} | P: {s_p:.0f} | K: {s_k:.0f} mg/kg | ชื้น: {s_m:.1f}% | EC: {s_ec:.3f}")
+                    print(f"\n[{now_str}] 🛰️ [Triple-Sensor Bus Live Streams - HTTP 200 OK]:")
+                    print(f"    🌱 ดิน 7-in-1 (ZTS-3002 ID 1): ชื้น: {s_m:.1f}% | ดิน: {s_t:.1f}°C | EC: {s_ec:.3f} dS/m | pH: {s_ph:.1f}")
+                    print(f"    ☀️ อากาศ/แสง (SN-3002  ID 2): แสง: {lux:,.0f} Lux | อุณหภูมิ: {air_t:.1f}°C | ความชื้น: {air_rh:.1f}%")
+                    print(f"    🧪 ธาตุปุ๋ย  (SN-3002  ID 3): N: {s_n:.0f} | P: {s_p:.0f} | K: {s_k:.0f} mg/kg")
                 else:
                     print(f"[{now_str}] Backend HTTP {res.status_code}: {res.text}")
             except Exception as ex:

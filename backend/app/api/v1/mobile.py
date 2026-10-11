@@ -52,15 +52,15 @@ async def get_farmer_mobile_summary(
     latest = latest_res.scalar_one_or_none()
 
     if latest:
-        moisture = round(latest.soil_moisture_pct or 0.0, 1)
-        soil_temp = round(latest.soil_temp_c or 28.5, 1)
-        ec = round(latest.soil_ec_ds_m or 0.0, 3)
-        k = round(latest.soil_k_mg_kg or 265.0, 0)
-        ph = round(latest.soil_ph or 6.5, 1)
-        temp = round(latest.air_temp_c or 27.9, 1)
-        rh = round(latest.air_rh_pct or 48.0, 0)
-        lux = round(latest.light_lux or 0.0, 0)
-        wind = round(latest.wind_speed_kmh or 8.5, 1)
+        moisture = round(latest.soil_moisture_pct, 1) if latest.soil_moisture_pct is not None else 0.0
+        soil_temp = round(latest.soil_temp_c, 1) if latest.soil_temp_c is not None else 0.0
+        ec = round(latest.soil_ec_ds_m, 3) if latest.soil_ec_ds_m is not None else 0.0
+        k = round(latest.soil_k_mg_kg, 0) if latest.soil_k_mg_kg is not None else 0.0
+        ph = round(latest.soil_ph, 1) if latest.soil_ph is not None else 0.0
+        temp = round(latest.air_temp_c, 1) if latest.air_temp_c is not None else 0.0
+        rh = round(latest.air_rh_pct, 0) if latest.air_rh_pct is not None else 0.0
+        lux = round(latest.light_lux, 0) if latest.light_lux is not None else 0.0
+        wind = round(latest.wind_speed_kmh, 1) if latest.wind_speed_kmh is not None else 0.0
     else:
         sim = simulator_instance.step()
         moisture = sim["soil_moisture_pct"]

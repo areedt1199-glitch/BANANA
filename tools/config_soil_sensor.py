@@ -187,14 +187,21 @@ def scan_rs485_bus(port_name: str, test_baud: int = 9600, max_id: int = 10):
                         })
                         continue
 
-                # 2. ลองอ่านแบบ Soil 7-in-1 (Count 7)
+                # 2. ลองอ่านแบบ Soil (Count 7)
                 s_data = read_soil_7in1(ser, sid)
                 if s_data:
+                    if sid == 1:
+                        m_name = "ZTS-3002-TR-ECTHNPKPH-N01 (Soil 7-in-1: Temp/Moisture/EC/pH/NPK)"
+                    elif sid == 3:
+                        m_name = "SN-3002-TR-NPK-NO1 (Soil NPK Nutrients)"
+                    else:
+                        m_name = f"Soil Modbus Sensor (Slave ID {sid})"
+
                     found_sensors.append({
                         "id": sid,
                         "baud": test_baud,
                         "type": "soil",
-                        "model": "SN-3002-TR-NPK-NO1 (Soil 7-in-1)",
+                        "model": m_name,
                         "data": s_data
                     })
                     continue
