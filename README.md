@@ -133,3 +133,5 @@ BANANAFARM/
 
 ## 🛡️ License & Credits
 พัฒนาเพื่อเกษตรกรแปลงใหญ่กล้วยหอมทองเพื่อการส่งออก (Precision Agriculture IoT & AI Platform).
+#   B A N A N A  
+ 
